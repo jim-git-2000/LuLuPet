@@ -19,8 +19,8 @@
     <Content Include="..\..\settings.json"
              Link="settings.json"
              CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\assets\pet\idle\*.png"
-             Link="Assets\pet\idle\%(Filename)%(Extension)"
+    <Content Include="..\..\assets\pet\**\*.png"
+             Link="Assets\pet\%(RecursiveDir)%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

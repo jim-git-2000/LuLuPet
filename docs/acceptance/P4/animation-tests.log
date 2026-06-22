@@ -1,0 +1,28 @@
+P4 animation validation
+
+Command:
+dotnet build src/LuluPet.Win32/LuluPet.Win32.csproj --no-restore
+
+Result:
+Passed.
+
+Output summary:
+LuluPet.Core -> src/LuluPet.Core/bin/Debug/net8.0/LuluPet.Core.dll
+LuluPet.Win32 -> src/LuluPet.Win32/bin/Debug/net8.0/LuluPet.Win32.dll
+Build succeeded. 0 Warning(s), 0 Error(s).
+
+Command:
+dotnet test
+
+Result:
+Not run successfully in the local Ubuntu sandbox.
+
+Output summary:
+The test project depends on NuGet packages. Full test execution is expected in
+GitHub Actions where NuGet restore is available.
+
+Manual acceptance:
+Download the GitHub Actions artifact and run on Windows. Provide PNG frames in
+the idle, walk, and sleep asset directories, then press I/W/S to confirm action
+switching and continuous playback.
+

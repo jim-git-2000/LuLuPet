@@ -6,6 +6,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using LuluPet.Core.Animation;
 using LuluPet.Core.Config;
 
 namespace LuluPet.App;
@@ -14,6 +16,10 @@ public partial class MainWindow : Window
 {
     private readonly JsonSettingsStore _settingsStore;
     private readonly AppSettings _settings;
+    private readonly FrameAnimationPlayer _animationPlayer = new();
+    private readonly DispatcherTimer _animationTimer = new();
+    private readonly Dictionary<string, BitmapImage> _frameCache = new(StringComparer.OrdinalIgnoreCase);
+    private DateTimeOffset _lastAnimationTick;
 
     public MainWindow()
     {
@@ -23,7 +29,7 @@ public partial class MainWindow : Window
 
         InitializeComponent();
         RestoreWindowPosition();
-        LoadIdleFrame();
+        InitializeAnimation();
     }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -51,18 +57,104 @@ public partial class MainWindow : Window
         }
     }
 
-    private void LoadIdleFrame()
+    protected override void OnKeyDown(KeyEventArgs e)
     {
-        var framePath = Path.Combine(
+        base.OnKeyDown(e);
+
+        if (e.Key == Key.I)
+        {
+            TryPlayAction("Idle");
+        }
+
+        if (e.Key == Key.W)
+        {
+            TryPlayAction("Walk");
+        }
+
+        if (e.Key == Key.S)
+        {
+            TryPlayAction("Sleep");
+        }
+    }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        _animationTimer.Stop();
+        SaveWindowPosition();
+        base.OnClosing(e);
+    }
+
+    private void InitializeAnimation()
+    {
+        _animationPlayer.FrameChanged += (_, args) => SetPetFrame(args.FramePath);
+
+        LoadAction("Idle", "idle", fps: 8);
+        LoadAction("Walk", "walk", fps: 12);
+        LoadAction("Sleep", "sleep", fps: 8);
+
+        _animationTimer.Interval = TimeSpan.FromMilliseconds(33);
+        _animationTimer.Tick += (_, _) => TickAnimation();
+        _lastAnimationTick = DateTimeOffset.UtcNow;
+
+        if (TryPlayAction("Idle") || TryPlayAction("Walk") || TryPlayAction("Sleep"))
+        {
+            _animationTimer.Start();
+        }
+        else
+        {
+            MissingAssetFallback.Visibility = Visibility.Visible;
+        }
+
+        Loaded += (_, _) => Keyboard.Focus(this);
+    }
+
+    private void LoadAction(string actionName, string directoryName, int fps)
+    {
+        var directoryPath = Path.Combine(
             AppContext.BaseDirectory,
             "Assets",
             "pet",
-            "idle",
-            "lulu_idle_0001.png");
+            directoryName);
 
+        _animationPlayer.TryLoadActionFromDirectory(actionName, directoryPath, fps);
+    }
+
+    private bool TryPlayAction(string actionName)
+    {
+        if (!_animationPlayer.CanPlay(actionName))
+        {
+            return false;
+        }
+
+        _animationPlayer.Play(actionName);
+        return true;
+    }
+
+    private void TickAnimation()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var elapsed = now - _lastAnimationTick;
+        _lastAnimationTick = now;
+        _animationPlayer.Tick(elapsed);
+    }
+
+    private void SetPetFrame(string framePath)
+    {
         if (!File.Exists(framePath))
         {
             MissingAssetFallback.Visibility = Visibility.Visible;
+            return;
+        }
+
+        if (_frameCache.TryGetValue(framePath, out var cachedImage))
+        {
+            PetImage.Source = cachedImage;
+            MissingAssetFallback.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -73,19 +165,9 @@ public partial class MainWindow : Window
         image.EndInit();
         image.Freeze();
 
+        _frameCache[framePath] = image;
         PetImage.Source = image;
         MissingAssetFallback.Visibility = Visibility.Collapsed;
-    }
-
-    private void CloseButton_Click(object sender, RoutedEventArgs e)
-    {
-        Close();
-    }
-
-    protected override void OnClosing(CancelEventArgs e)
-    {
-        SaveWindowPosition();
-        base.OnClosing(e);
     }
 
     private void RestoreWindowPosition()

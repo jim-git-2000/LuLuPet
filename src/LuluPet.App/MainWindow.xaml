@@ -10,7 +10,8 @@
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         Topmost="True"
-        WindowStartupLocation="Manual">
+        WindowStartupLocation="Manual"
+        Focusable="True">
     <Grid Background="Transparent">
         <Image x:Name="PetImage"
                Width="300"

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <AssemblyName>LuluPet</AssemblyName>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
@@ -15,6 +16,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="..\..\settings.json"
+             Link="settings.json"
+             CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\assets\pet\idle\*.png"
              Link="Assets\pet\idle\%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />

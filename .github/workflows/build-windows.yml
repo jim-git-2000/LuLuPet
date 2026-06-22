@@ -45,6 +45,7 @@ jobs:
         shell: pwsh
         run: |
           if (!(Test-Path "publish/win-x64/LuluPet.exe")) {
+            Get-ChildItem "publish/win-x64" -Recurse | Select-Object FullName, Length
             throw "LuluPet.exe not found"
           }
           $file = Get-Item "publish/win-x64/LuluPet.exe"

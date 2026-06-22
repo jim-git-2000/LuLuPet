@@ -14,5 +14,10 @@
     <ProjectReference Include="..\LuluPet.Win32\LuluPet.Win32.csproj" />
   </ItemGroup>
 
-</Project>
+  <ItemGroup>
+    <Content Include="..\..\assets\pet\idle\*.png"
+             Link="Assets\pet\idle\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
+</Project>

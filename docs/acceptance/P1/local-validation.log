@@ -1,0 +1,33 @@
+P1 local validation
+
+Command:
+Static inspection of MainWindow.xaml and LuluPet.App.csproj.
+
+Result:
+Passed.
+
+Output summary:
+MainWindow.xaml contains the transparent borderless desktop-pet properties
+required by P1. LuluPet.App.csproj includes a content rule for idle PNG assets.
+
+Command:
+dotnet build src/LuluPet.Win32/LuluPet.Win32.csproj --no-restore
+
+Result:
+Passed.
+
+Output summary:
+LuluPet.Core -> src/LuluPet.Core/bin/Debug/net8.0/LuluPet.Core.dll
+LuluPet.Win32 -> src/LuluPet.Win32/bin/Debug/net8.0/LuluPet.Win32.dll
+Build succeeded. 0 Warning(s), 0 Error(s).
+
+Command:
+dotnet restore/build src/LuluPet.App/LuluPet.App.csproj
+
+Result:
+Not run successfully in the local Ubuntu sandbox.
+
+Output summary:
+The WPF app targets net8.0-windows and requires Windows Desktop reference
+packages. Full app restore/build/publish is expected to run in GitHub Actions
+on windows-latest.

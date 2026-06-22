@@ -1,0 +1,60 @@
+P0 local validation
+
+Command:
+dotnet --version
+
+Result:
+Passed.
+
+Output:
+8.0.128
+
+Command:
+dotnet --list-sdks
+
+Result:
+Passed.
+
+Output:
+8.0.128 [/usr/lib/dotnet/sdk]
+
+Command:
+dotnet restore src/LuluPet.Core/LuluPet.Core.csproj --configfile /tmp/lulupet-offline-nuget.config
+dotnet build src/LuluPet.Core/LuluPet.Core.csproj --no-restore
+
+Result:
+Passed.
+
+Output summary:
+LuluPet.Core -> src/LuluPet.Core/bin/Debug/net8.0/LuluPet.Core.dll
+Build succeeded. 0 Warning(s), 0 Error(s).
+
+Command:
+dotnet restore src/LuluPet.Win32/LuluPet.Win32.csproj --configfile /tmp/lulupet-offline-nuget.config
+dotnet build src/LuluPet.Win32/LuluPet.Win32.csproj --no-restore
+
+Result:
+Passed.
+
+Output summary:
+LuluPet.Core -> src/LuluPet.Core/bin/Debug/net8.0/LuluPet.Core.dll
+LuluPet.Win32 -> src/LuluPet.Win32/bin/Debug/net8.0/LuluPet.Win32.dll
+Build succeeded. 0 Warning(s), 0 Error(s).
+
+Command:
+dotnet restore tests/LuluPet.Core.Tests/LuluPet.Core.Tests.csproj --configfile /tmp/lulupet-offline-nuget.config
+
+Result:
+Failed in the local sandbox.
+
+Output summary:
+Unable to resolve Microsoft.NET.Test.Sdk, xunit, and xunit.runner.visualstudio because the local environment cannot access NuGet.
+
+Command:
+dotnet restore src/LuluPet.App/LuluPet.App.csproj --configfile /tmp/lulupet-offline-nuget.config
+
+Result:
+Failed in the local sandbox.
+
+Output summary:
+The WPF app targets net8.0-windows and needs Windows Desktop reference packages. Full app restore/build is expected to run in GitHub Actions on windows-latest.

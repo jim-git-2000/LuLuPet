@@ -1,0 +1,63 @@
+name: build-windows
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-restore
+
+      - name: Publish
+        run: >
+          dotnet publish src/LuluPet.App/LuluPet.App.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          /p:PublishSingleFile=true
+          /p:IncludeNativeLibrariesForSelfExtract=true
+          /p:EnableWindowsTargeting=true
+          -o publish/win-x64
+
+      - name: Verify artifact
+        shell: pwsh
+        run: |
+          if (!(Test-Path "publish/win-x64/LuluPet.exe")) {
+            throw "LuluPet.exe not found"
+          }
+          $file = Get-Item "publish/win-x64/LuluPet.exe"
+          if ($file.Length -lt 1MB) {
+            throw "LuluPet.exe is suspiciously small"
+          }
+          Get-FileHash "publish/win-x64/LuluPet.exe" -Algorithm SHA256 |
+            Tee-Object -FilePath "publish/win-x64/LuluPet.exe.sha256.txt"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LuluPet-win-x64
+          path: publish/win-x64/
+          retention-days: 14
+

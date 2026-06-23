@@ -1,0 +1,28 @@
+P4 regression check after P3
+
+Command:
+Static inspection of `MainWindow` tray lifecycle and animation lifecycle.
+
+Result:
+Passed.
+
+Output summary:
+P3 tray integration keeps P4 animation wiring in place:
+- `FrameAnimationPlayer` remains owned by `MainWindow`.
+- `DispatcherTimer` still drives animation ticks.
+- Idle/Walk/Sleep loading remains unchanged.
+- I/W/S keyboard action switching remains unchanged.
+- Hiding to tray stops the animation timer.
+- Restoring from tray restarts the animation timer if an action is playing.
+
+Command:
+dotnet build src/LuluPet.Win32/LuluPet.Win32.csproj --no-restore
+
+Result:
+Passed.
+
+Output summary:
+LuluPet.Core -> src/LuluPet.Core/bin/Debug/net8.0/LuluPet.Core.dll
+LuluPet.Win32 -> src/LuluPet.Win32/bin/Debug/net8.0/LuluPet.Win32.dll
+Build succeeded. 0 Warning(s), 0 Error(s).
+

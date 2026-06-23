@@ -5,6 +5,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -18,6 +19,9 @@
   <ItemGroup>
     <Content Include="..\..\settings.json"
              Link="settings.json"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\icons\app.ico"
+             Link="Assets\icons\app.ico"
              CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\assets\pet\**\*.png"
              Link="Assets\pet\%(RecursiveDir)%(Filename)%(Extension)"

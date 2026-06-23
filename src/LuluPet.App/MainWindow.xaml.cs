@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Drawing;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,6 +10,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using LuluPet.Core.Animation;
 using LuluPet.Core.Config;
+using Forms = System.Windows.Forms;
 
 namespace LuluPet.App;
 
@@ -19,7 +21,11 @@ public partial class MainWindow : Window
     private readonly FrameAnimationPlayer _animationPlayer = new();
     private readonly DispatcherTimer _animationTimer = new();
     private readonly Dictionary<string, BitmapImage> _frameCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Forms.NotifyIcon _notifyIcon;
+    private readonly Forms.ToolStripMenuItem _showMenuItem;
+    private readonly Forms.ToolStripMenuItem _hideMenuItem;
     private DateTimeOffset _lastAnimationTick;
+    private bool _isExitRequested;
 
     public MainWindow()
     {
@@ -28,8 +34,13 @@ public partial class MainWindow : Window
         _settings = _settingsStore.Load();
 
         InitializeComponent();
+        _showMenuItem = new Forms.ToolStripMenuItem("显示", null, (_, _) => ShowPetWindow());
+        _hideMenuItem = new Forms.ToolStripMenuItem("隐藏", null, (_, _) => HidePetWindow());
+        _notifyIcon = CreateNotifyIcon();
+
         RestoreWindowPosition();
         InitializeAnimation();
+        UpdateTrayMenuState();
     }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -84,9 +95,108 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        if (!_isExitRequested)
+        {
+            e.Cancel = true;
+            HidePetWindow();
+            return;
+        }
+
         _animationTimer.Stop();
         SaveWindowPosition();
+        DisposeTrayIcon();
         base.OnClosing(e);
+    }
+
+    private Forms.NotifyIcon CreateNotifyIcon()
+    {
+        var exitMenuItem = new Forms.ToolStripMenuItem("退出", null, (_, _) => ExitApplication());
+        var contextMenu = new Forms.ContextMenuStrip();
+        contextMenu.Items.Add(_showMenuItem);
+        contextMenu.Items.Add(_hideMenuItem);
+        contextMenu.Items.Add(new Forms.ToolStripSeparator());
+        contextMenu.Items.Add(exitMenuItem);
+
+        var notifyIcon = new Forms.NotifyIcon
+        {
+            ContextMenuStrip = contextMenu,
+            Icon = LoadTrayIcon(),
+            Text = "LuluPet",
+            Visible = true
+        };
+
+        notifyIcon.DoubleClick += (_, _) => ShowPetWindow();
+        return notifyIcon;
+    }
+
+    private Icon LoadTrayIcon()
+    {
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "icons", "app.ico");
+
+        if (!File.Exists(iconPath))
+        {
+            return SystemIcons.Application;
+        }
+
+        try
+        {
+            return new Icon(iconPath);
+        }
+        catch (ArgumentException)
+        {
+            return SystemIcons.Application;
+        }
+        catch (IOException)
+        {
+            return SystemIcons.Application;
+        }
+    }
+
+    private void ShowPetWindow()
+    {
+        Show();
+
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+        Keyboard.Focus(this);
+
+        if (_animationPlayer.IsPlaying)
+        {
+            _lastAnimationTick = DateTimeOffset.UtcNow;
+            _animationTimer.Start();
+        }
+
+        UpdateTrayMenuState();
+    }
+
+    private void HidePetWindow()
+    {
+        SaveWindowPosition();
+        _animationTimer.Stop();
+        Hide();
+        UpdateTrayMenuState();
+    }
+
+    private void ExitApplication()
+    {
+        _isExitRequested = true;
+        Close();
+    }
+
+    private void UpdateTrayMenuState()
+    {
+        _showMenuItem.Enabled = !IsVisible;
+        _hideMenuItem.Enabled = IsVisible;
+    }
+
+    private void DisposeTrayIcon()
+    {
+        _notifyIcon.Visible = false;
+        _notifyIcon.Dispose();
     }
 
     private void InitializeAnimation()

@@ -1,0 +1,33 @@
+P3 local validation
+
+Command:
+Static inspection of `MainWindow` tray lifecycle and `LuluPet.App.csproj`.
+
+Result:
+Passed.
+
+Output summary:
+`NotifyIcon` is initialized with a context menu, double-click restore, icon
+fallback, close-to-hide behavior, explicit exit behavior, and disposal on exit.
+
+Command:
+dotnet build src/LuluPet.Win32/LuluPet.Win32.csproj --no-restore
+
+Result:
+Passed.
+
+Output summary:
+LuluPet.Core -> src/LuluPet.Core/bin/Debug/net8.0/LuluPet.Core.dll
+LuluPet.Win32 -> src/LuluPet.Win32/bin/Debug/net8.0/LuluPet.Win32.dll
+Build succeeded. 0 Warning(s), 0 Error(s).
+
+Command:
+dotnet restore/build src/LuluPet.App/LuluPet.App.csproj
+
+Result:
+Not run successfully in the local Ubuntu sandbox.
+
+Output summary:
+The WPF app targets net8.0-windows and uses Windows Forms tray integration.
+Full app restore/build/publish is expected to run in GitHub Actions on
+windows-latest.

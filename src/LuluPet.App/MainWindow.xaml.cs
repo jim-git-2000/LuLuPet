@@ -13,6 +13,7 @@ using LuluPet.Core.Animation;
 using LuluPet.Core.Behavior;
 using LuluPet.Core.Config;
 using LuluPet.Core.Dialogues;
+using LuluPet.Core.Storage;
 using LuluPet.Win32;
 using Forms = System.Windows.Forms;
 
@@ -23,6 +24,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly JsonSettingsStore _settingsStore;
     private readonly AppSettings _settings;
     private readonly DialogueLineProvider _dialogueLineProvider;
+    private readonly SqlitePetRepository _petRepository;
     private readonly FrameAnimationPlayer _animationPlayer = new();
     private readonly PetStateMachine _stateMachine = new();
     private readonly DispatcherTimer _animationTimer = new();
@@ -39,6 +41,7 @@ public partial class MainWindow : System.Windows.Window
     private DateTimeOffset _lastStateTick;
     private DateTimeOffset? _interactionAnimationUntil;
     private nint _windowHandle;
+    private PetState _initialPetState = PetState.Idle;
     private int _walkDirection = 1;
     private bool _isClampingWindow;
     private bool _isExitRequested;
@@ -55,6 +58,7 @@ public partial class MainWindow : System.Windows.Window
         _settings = _settingsStore.Load();
         _dialogueLineProvider = new DialogueLineProvider(
             Path.Combine(AppContext.BaseDirectory, "Assets", "dialogues", "lines.json"));
+        _petRepository = new SqlitePetRepository(LuluPetDataPaths.GetDefaultDatabasePath());
 
         InitializeComponent();
         _showMenuItem = new Forms.ToolStripMenuItem("显示", null, (_, _) => ShowPetWindow());
@@ -69,6 +73,7 @@ public partial class MainWindow : System.Windows.Window
         };
         _notifyIcon = CreateNotifyIcon();
 
+        InitializeStorage();
         RestoreWindowPosition();
         InitializeAnimation();
         InitializeBehavior();
@@ -297,6 +302,12 @@ public partial class MainWindow : System.Windows.Window
         _stateTimer.Tick += (_, _) => TickBehavior();
         _lastStateTick = DateTimeOffset.UtcNow;
         _stateTimer.Start();
+
+        if (_initialPetState != PetState.Idle)
+        {
+            _stateMachine.ForceState(_initialPetState);
+            PlayStateAnimation(_initialPetState);
+        }
     }
 
     private void InitializeSpeech()
@@ -384,6 +395,7 @@ public partial class MainWindow : System.Windows.Window
     {
         Debug.WriteLine($"LuluPet state: {args.PreviousState} -> {args.CurrentState}");
         PlayStateAnimation(args.CurrentState);
+        SavePetStatus();
 
         if (args.CurrentState == PetState.Walk)
         {
@@ -457,7 +469,8 @@ public partial class MainWindow : System.Windows.Window
             TryPlayAction("Idle");
         }
 
-        ShowRandomSpeech();
+        var message = ShowRandomSpeech();
+        RecordInteraction("click", message);
     }
 
     private bool IsInteractionAnimationActive()
@@ -466,12 +479,12 @@ public partial class MainWindow : System.Windows.Window
             && DateTimeOffset.UtcNow < _interactionAnimationUntil.Value;
     }
 
-    private void ShowRandomSpeech()
+    private string? ShowRandomSpeech()
     {
         var line = _dialogueLineProvider.GetRandomLine();
         if (string.IsNullOrWhiteSpace(line))
         {
-            return;
+            return null;
         }
 
         SpeechBubble.SetText(line);
@@ -479,6 +492,7 @@ public partial class MainWindow : System.Windows.Window
 
         _bubbleHideTimer.Stop();
         _bubbleHideTimer.Start();
+        return line;
     }
 
     private void HideSpeechBubble()
@@ -527,6 +541,74 @@ public partial class MainWindow : System.Windows.Window
         _settings.Window.Left = Left;
         _settings.Window.Top = Top;
         SaveSettings();
+        SavePetStatus();
+    }
+
+    private void InitializeStorage()
+    {
+        try
+        {
+            var databaseExists = File.Exists(_petRepository.DatabasePath);
+            _petRepository.Initialize();
+
+            if (databaseExists)
+            {
+                var status = _petRepository.LoadStatus();
+                _settings.Window.Left = status.WindowLeft;
+                _settings.Window.Top = status.WindowTop;
+                _initialPetState = Enum.TryParse<PetState>(status.State, ignoreCase: true, out var savedState)
+                    ? savedState
+                    : PetState.Idle;
+            }
+            else
+            {
+                _petRepository.SaveStatus(new PetStatus(
+                    PetState.Idle.ToString(),
+                    _settings.Window.Left,
+                    _settings.Window.Top,
+                    DateTimeOffset.UtcNow));
+            }
+
+            Debug.WriteLine($"LuluPet database: {_petRepository.DatabasePath}");
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"Failed to initialize LuluPet database: {exception.Message}");
+        }
+    }
+
+    private void SavePetStatus()
+    {
+        try
+        {
+            _petRepository.SaveStatus(new PetStatus(
+                _stateMachine.CurrentState.ToString(),
+                Left,
+                Top,
+                DateTimeOffset.UtcNow));
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"Failed to save pet status: {exception.Message}");
+        }
+    }
+
+    private void RecordInteraction(string interactionType, string? message)
+    {
+        try
+        {
+            _petRepository.RecordInteraction(new PetInteraction(
+                interactionType,
+                message,
+                _animationPlayer.CurrentAction,
+                Left,
+                Top,
+                DateTimeOffset.UtcNow));
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"Failed to record pet interaction: {exception.Message}");
+        }
     }
 
     private void ToggleClickThrough()

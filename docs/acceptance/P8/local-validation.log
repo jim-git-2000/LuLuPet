@@ -1,0 +1,34 @@
+P8 local validation
+
+Environment:
+- OS: Ubuntu local workspace
+- .NET SDK: 8.0.128
+- Network access: restricted
+
+Passed:
+
+- git diff --check
+- Static checks:
+  - `Microsoft.Data.Sqlite` package reference exists in `src/LuluPet.Core/LuluPet.Core.csproj`.
+  - `SqlitePetRepository` contains schema creation and CRUD methods.
+  - `docs/acceptance/P8/db-schema.sql` contains `pet_profile`, `pet_status`, and `interaction_log`.
+  - `MainWindow` initializes SQLite storage, loads status, saves status, and records click interactions.
+
+Blocked locally:
+
+- dotnet restore src/LuluPet.Core/LuluPet.Core.csproj
+  - Fails because this environment cannot reach `https://api.nuget.org/v3/index.json`.
+  - Error: `NU1301: Unable to load the service index`.
+
+- dotnet build src/LuluPet.Core/LuluPet.Core.csproj --no-restore
+  - Fails because `Microsoft.Data.Sqlite` has not been restored locally.
+  - Expected errors include missing `Microsoft.Data.Sqlite` / `SqliteConnection`.
+
+- dotnet build src/LuluPet.App/LuluPet.App.csproj --no-restore
+  - Still blocked locally because the Ubuntu apt .NET SDK does not include `Microsoft.NET.Sdk.WindowsDesktop`.
+
+Expected GitHub validation:
+
+- GitHub Actions Windows runner runs `dotnet restore`.
+- `dotnet test --configuration Release --no-restore` should execute `SqlitePetRepositoryTests`.
+- `dotnet publish src/LuluPet.App/LuluPet.App.csproj ...` should include SQLite package/native runtime assets through self-contained publish with native library extraction enabled.

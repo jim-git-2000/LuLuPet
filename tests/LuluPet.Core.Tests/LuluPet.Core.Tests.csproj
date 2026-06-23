@@ -18,7 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\LuluPet.Core\LuluPet.Core.csproj" />
+    <ProjectReference Include="..\..\src\LuluPet.Win32\LuluPet.Win32.csproj" />
   </ItemGroup>
 
 </Project>
-

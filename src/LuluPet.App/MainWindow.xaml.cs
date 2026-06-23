@@ -8,10 +8,12 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using LuluPet.Core;
 using LuluPet.Core.Animation;
 using LuluPet.Core.Behavior;
 using LuluPet.Core.Config;
 using LuluPet.Core.Dialogues;
+using LuluPet.Win32;
 using Forms = System.Windows.Forms;
 
 namespace LuluPet.App;
@@ -31,10 +33,14 @@ public partial class MainWindow : System.Windows.Window
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly Forms.ToolStripMenuItem _showMenuItem;
     private readonly Forms.ToolStripMenuItem _hideMenuItem;
+    private readonly Forms.ToolStripMenuItem _clickThroughMenuItem;
+    private readonly Forms.ToolStripMenuItem _autoStartMenuItem;
     private DateTimeOffset _lastAnimationTick;
     private DateTimeOffset _lastStateTick;
     private DateTimeOffset? _interactionAnimationUntil;
+    private nint _windowHandle;
     private int _walkDirection = 1;
+    private bool _isClampingWindow;
     private bool _isExitRequested;
 
     private const double WalkPixelsPerSecond = 36;
@@ -53,12 +59,21 @@ public partial class MainWindow : System.Windows.Window
         InitializeComponent();
         _showMenuItem = new Forms.ToolStripMenuItem("显示", null, (_, _) => ShowPetWindow());
         _hideMenuItem = new Forms.ToolStripMenuItem("隐藏", null, (_, _) => HidePetWindow());
+        _clickThroughMenuItem = new Forms.ToolStripMenuItem("点击穿透", null, (_, _) => ToggleClickThrough())
+        {
+            CheckOnClick = false
+        };
+        _autoStartMenuItem = new Forms.ToolStripMenuItem("开机启动", null, (_, _) => ToggleAutoStart())
+        {
+            CheckOnClick = false
+        };
         _notifyIcon = CreateNotifyIcon();
 
         RestoreWindowPosition();
         InitializeAnimation();
         InitializeBehavior();
         InitializeSpeech();
+        InitializeWin32();
         UpdateTrayMenuState();
     }
 
@@ -152,6 +167,9 @@ public partial class MainWindow : System.Windows.Window
         contextMenu.Items.Add(_showMenuItem);
         contextMenu.Items.Add(_hideMenuItem);
         contextMenu.Items.Add(new Forms.ToolStripSeparator());
+        contextMenu.Items.Add(_clickThroughMenuItem);
+        contextMenu.Items.Add(_autoStartMenuItem);
+        contextMenu.Items.Add(new Forms.ToolStripSeparator());
         contextMenu.Items.Add(exitMenuItem);
 
         var notifyIcon = new Forms.NotifyIcon
@@ -200,6 +218,7 @@ public partial class MainWindow : System.Windows.Window
 
         Activate();
         Keyboard.Focus(this);
+        ApplyWindowStyles();
 
         if (_animationPlayer.IsPlaying)
         {
@@ -235,6 +254,8 @@ public partial class MainWindow : System.Windows.Window
     {
         _showMenuItem.Enabled = !IsVisible;
         _hideMenuItem.Enabled = IsVisible;
+        _clickThroughMenuItem.Checked = _settings.Interaction.ClickThrough;
+        _autoStartMenuItem.Checked = _settings.Startup.AutoStart;
     }
 
     private void DisposeTrayIcon()
@@ -289,6 +310,24 @@ public partial class MainWindow : System.Windows.Window
 
         _bubbleHideTimer.Interval = BubbleVisibleDuration;
         _bubbleHideTimer.Tick += (_, _) => HideSpeechBubble();
+    }
+
+    private void InitializeWin32()
+    {
+        SourceInitialized += (_, _) =>
+        {
+            _windowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            ApplyWindowStyles();
+            ClampWindowToWorkArea();
+        };
+
+        LocationChanged += (_, _) => ClampWindowToWorkArea();
+        SizeChanged += (_, _) => ClampWindowToWorkArea();
+        Loaded += (_, _) =>
+        {
+            ClampWindowToWorkArea();
+            ApplyAutoStartSetting();
+        };
     }
 
     private void LoadAction(string actionName, string directoryName, int fps)
@@ -394,6 +433,7 @@ public partial class MainWindow : System.Windows.Window
         }
 
         Left = nextLeft;
+        ClampWindowToWorkArea();
     }
 
     private void PetImage_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -478,13 +518,104 @@ public partial class MainWindow : System.Windows.Window
     {
         Left = _settings.Window.Left;
         Top = _settings.Window.Top;
+        ClampWindowToWorkArea();
     }
 
     private void SaveWindowPosition()
     {
+        ClampWindowToWorkArea();
         _settings.Window.Left = Left;
         _settings.Window.Top = Top;
+        SaveSettings();
+    }
 
+    private void ToggleClickThrough()
+    {
+        _settings.Interaction.ClickThrough = !_settings.Interaction.ClickThrough;
+        ApplyWindowStyles();
+        SaveSettings();
+        UpdateTrayMenuState();
+    }
+
+    private void ToggleAutoStart()
+    {
+        _settings.Startup.AutoStart = !_settings.Startup.AutoStart;
+        ApplyAutoStartSetting();
+        SaveSettings();
+        UpdateTrayMenuState();
+    }
+
+    private void ApplyWindowStyles()
+    {
+        if (_windowHandle == nint.Zero)
+        {
+            return;
+        }
+
+        try
+        {
+            WindowStyleService.ApplyPetWindowStyles(_windowHandle, _settings.Interaction.ClickThrough);
+        }
+        catch (Win32Exception exception)
+        {
+            Debug.WriteLine($"Failed to apply pet window styles: {exception.Message}");
+        }
+    }
+
+    private void ApplyAutoStartSetting()
+    {
+        try
+        {
+            StartupRegistryService.SetEnabled(
+                ProjectInfo.ProductName,
+                Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty,
+                _settings.Startup.AutoStart);
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or UnauthorizedAccessException
+            or IOException
+            or System.Security.SecurityException)
+        {
+            Debug.WriteLine($"Failed to update auto-start registry value: {exception.Message}");
+        }
+    }
+
+    private void ClampWindowToWorkArea()
+    {
+        if (_isClampingWindow)
+        {
+            return;
+        }
+
+        var width = ActualWidth > 0 ? ActualWidth : Width;
+        var height = ActualHeight > 0 ? ActualHeight : Height;
+        var workArea = SystemParameters.WorkArea;
+        var minLeft = workArea.Left;
+        var minTop = workArea.Top;
+        var maxLeft = Math.Max(workArea.Left, workArea.Right - width);
+        var maxTop = Math.Max(workArea.Top, workArea.Bottom - height);
+        var clampedLeft = Math.Clamp(Left, minLeft, maxLeft);
+        var clampedTop = Math.Clamp(Top, minTop, maxTop);
+
+        if (Math.Abs(clampedLeft - Left) < 0.1 && Math.Abs(clampedTop - Top) < 0.1)
+        {
+            return;
+        }
+
+        try
+        {
+            _isClampingWindow = true;
+            Left = clampedLeft;
+            Top = clampedTop;
+        }
+        finally
+        {
+            _isClampingWindow = false;
+        }
+    }
+
+    private void SaveSettings()
+    {
         try
         {
             _settingsStore.Save(_settings);

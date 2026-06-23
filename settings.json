@@ -2,6 +2,11 @@
   "window": {
     "left": 1200,
     "top": 650
+  },
+  "interaction": {
+    "clickThrough": false
+  },
+  "startup": {
+    "autoStart": false
   }
 }
-

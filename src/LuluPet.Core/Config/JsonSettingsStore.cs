@@ -67,6 +67,8 @@ public sealed class JsonSettingsStore
     {
         var normalized = settings ?? AppSettings.CreateDefault();
         normalized.Window ??= new WindowSettings();
+        normalized.Interaction ??= new InteractionSettings();
+        normalized.Startup ??= new StartupSettings();
 
         if (!double.IsFinite(normalized.Window.Left))
         {
@@ -81,4 +83,3 @@ public sealed class JsonSettingsStore
         return normalized;
     }
 }
-

@@ -1,0 +1,35 @@
+P7 local validation
+
+Environment:
+- OS: Ubuntu local workspace
+- .NET SDK: 8.0.128
+
+Passed:
+
+- python3 -m json.tool settings.json
+- dotnet build src/LuluPet.Core/LuluPet.Core.csproj --no-restore
+- dotnet build src/LuluPet.Win32/LuluPet.Win32.csproj --no-restore
+  - 0 warnings
+  - 0 errors
+- git diff --check
+
+Expected local blockers:
+
+- dotnet build src/LuluPet.App/LuluPet.App.csproj --no-restore
+  - Failed because the Ubuntu apt .NET SDK does not include `Microsoft.NET.Sdk.WindowsDesktop`.
+  - Validate this on the GitHub Actions Windows runner.
+
+- dotnet build tests/LuluPet.Core.Tests/LuluPet.Core.Tests.csproj --no-restore
+  - Failed because this offline Ubuntu environment does not have the xUnit NuGet packages restored:
+    - `Microsoft.NET.Test.Sdk (>= 17.11.1)`
+    - `xunit (>= 2.9.2)`
+    - `xunit.runner.visualstudio (>= 2.8.2)`
+  - Validate this on GitHub Actions after `dotnet restore`.
+
+Static checks:
+
+- `NativeMethods` declares `GetWindowLongPtr`, `SetWindowLongPtr`, and `SetWindowPos`.
+- `WindowStyleService` applies `WS_EX_LAYERED`, `WS_EX_TOOLWINDOW`, and conditional `WS_EX_TRANSPARENT`.
+- `StartupRegistryService` writes/removes the current-user `Run` value.
+- `MainWindow` exposes tray toggles for click-through and auto-start.
+- `MainWindow` clamps window position during restore, drag, walk movement, and location changes.

@@ -68,7 +68,7 @@ public partial class MainWindow : Window
         }
     }
 
-    protected override void OnKeyDown(KeyEventArgs e)
+    protected override void OnKeyDown(System.Windows.Input.KeyEventArgs e)
     {
         base.OnKeyDown(e);
 
@@ -312,7 +312,7 @@ public partial class MainWindow : Window
 
         while (current is not null)
         {
-            if (current is Button button && button.Name == "CloseButton")
+            if (current is System.Windows.Controls.Button button && button.Name == "CloseButton")
             {
                 return true;
             }

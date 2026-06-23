@@ -44,11 +44,18 @@ public partial class MainWindow : System.Windows.Window
     private nint _windowHandle;
     private PetState _initialPetState = PetState.Idle;
     private SettingsWindow? _settingsWindow;
+    private System.Windows.Point _dragStartScreenPoint;
+    private double _dragStartLeft;
+    private double _dragStartTop;
     private int _walkDirection = 1;
     private bool _isClampingWindow;
+    private bool _isPotentialDrag;
+    private bool _isDraggingWindow;
+    private bool _dragStartedOnPet;
     private bool _isExitRequested;
 
     private const double WalkPixelsPerSecond = 36;
+    private const double DragThreshold = 4;
     private static readonly TimeSpan InteractionAnimationDuration = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan BubbleVisibleDuration = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan PeriodicSpeechInterval = TimeSpan.FromSeconds(30);
@@ -105,22 +112,61 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        if (IsFromPetImage(e.OriginalSource))
+        BeginPotentialDrag(e);
+        e.Handled = true;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+
+        if (!_isPotentialDrag || e.LeftButton != MouseButtonState.Pressed)
         {
-            HandlePetClick();
-            e.Handled = true;
             return;
         }
 
-        try
+        var currentScreenPoint = PointToScreen(e.GetPosition(this));
+        var deltaX = currentScreenPoint.X - _dragStartScreenPoint.X;
+        var deltaY = currentScreenPoint.Y - _dragStartScreenPoint.Y;
+
+        if (!_isDraggingWindow
+            && Math.Abs(deltaX) < DragThreshold
+            && Math.Abs(deltaY) < DragThreshold)
         {
-            DragMove();
+            return;
+        }
+
+        _isDraggingWindow = true;
+        Left = _dragStartLeft + deltaX;
+        Top = _dragStartTop + deltaY;
+        ClampWindowToWorkArea();
+        e.Handled = true;
+    }
+
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseLeftButtonUp(e);
+
+        if (!_isPotentialDrag)
+        {
+            return;
+        }
+
+        ReleaseMouseCapture();
+
+        if (_isDraggingWindow)
+        {
             SaveWindowPosition();
         }
-        catch (InvalidOperationException)
+        else if (_dragStartedOnPet)
         {
-            // DragMove can fail when the mouse button state changes mid-drag.
+            HandlePetClick();
         }
+
+        _isPotentialDrag = false;
+        _isDraggingWindow = false;
+        _dragStartedOnPet = false;
+        e.Handled = true;
     }
 
     protected override void OnKeyDown(System.Windows.Input.KeyEventArgs e)
@@ -459,15 +505,15 @@ public partial class MainWindow : System.Windows.Window
         ClampWindowToWorkArea();
     }
 
-    private void PetImage_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void BeginPotentialDrag(MouseButtonEventArgs e)
     {
-        if (e.ButtonState != MouseButtonState.Pressed)
-        {
-            return;
-        }
-
-        HandlePetClick();
-        e.Handled = true;
+        _isPotentialDrag = true;
+        _isDraggingWindow = false;
+        _dragStartedOnPet = IsFromPetImage(e.OriginalSource);
+        _dragStartScreenPoint = PointToScreen(e.GetPosition(this));
+        _dragStartLeft = Left;
+        _dragStartTop = Top;
+        CaptureMouse();
     }
 
     private void HandlePetClick()

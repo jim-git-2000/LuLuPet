@@ -41,7 +41,7 @@ public partial class SettingsWindow : System.Windows.Window
         }
     }
 
-    private void ScaleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void ScaleSlider_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
     {
         UpdateValueText();
 
@@ -51,7 +51,7 @@ public partial class SettingsWindow : System.Windows.Window
         }
     }
 
-    private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void OpacitySlider_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
     {
         UpdateValueText();
 
@@ -61,7 +61,7 @@ public partial class SettingsWindow : System.Windows.Window
         }
     }
 
-    private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void VolumeSlider_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
     {
         UpdateValueText();
 
@@ -71,7 +71,7 @@ public partial class SettingsWindow : System.Windows.Window
         }
     }
 
-    private void ClickThroughCheckBox_Changed(object sender, RoutedEventArgs e)
+    private void ClickThroughCheckBox_Changed(object sender, System.Windows.RoutedEventArgs e)
     {
         if (!_isInitializing)
         {
@@ -79,7 +79,7 @@ public partial class SettingsWindow : System.Windows.Window
         }
     }
 
-    private void AutoStartCheckBox_Changed(object sender, RoutedEventArgs e)
+    private void AutoStartCheckBox_Changed(object sender, System.Windows.RoutedEventArgs e)
     {
         if (!_isInitializing)
         {
@@ -87,7 +87,7 @@ public partial class SettingsWindow : System.Windows.Window
         }
     }
 
-    private void CloseButton_Click(object sender, RoutedEventArgs e)
+    private void CloseButton_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         Close();
     }

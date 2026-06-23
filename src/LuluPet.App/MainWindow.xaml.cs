@@ -93,7 +93,7 @@ public partial class MainWindow : System.Windows.Window
         UpdateTrayMenuState();
     }
 
-    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+    protected override void OnMouseLeftButtonDown(System.Windows.Input.MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
 
@@ -116,7 +116,7 @@ public partial class MainWindow : System.Windows.Window
         e.Handled = true;
     }
 
-    protected override void OnMouseMove(MouseEventArgs e)
+    protected override void OnMouseMove(System.Windows.Input.MouseEventArgs e)
     {
         base.OnMouseMove(e);
 
@@ -143,7 +143,7 @@ public partial class MainWindow : System.Windows.Window
         e.Handled = true;
     }
 
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    protected override void OnMouseLeftButtonUp(System.Windows.Input.MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonUp(e);
 
@@ -192,7 +192,7 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    private void CloseButton_Click(object sender, RoutedEventArgs e)
+    private void CloseButton_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         Close();
     }
@@ -505,7 +505,7 @@ public partial class MainWindow : System.Windows.Window
         ClampWindowToWorkArea();
     }
 
-    private void BeginPotentialDrag(MouseButtonEventArgs e)
+    private void BeginPotentialDrag(System.Windows.Input.MouseButtonEventArgs e)
     {
         _isPotentialDrag = true;
         _isDraggingWindow = false;

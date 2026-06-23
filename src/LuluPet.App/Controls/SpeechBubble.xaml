@@ -1,0 +1,27 @@
+<UserControl x:Class="LuluPet.App.Controls.SpeechBubble"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="230"
+             Height="96"
+             IsHitTestVisible="False">
+    <Grid>
+        <Border x:Name="FallbackBackground"
+                Background="#F7FFFFFF"
+                BorderBrush="#FFE6C56F"
+                BorderThickness="1"
+                CornerRadius="8" />
+        <Image x:Name="BubbleBackground"
+               Stretch="Fill"
+               Visibility="Collapsed" />
+        <TextBlock x:Name="BubbleText"
+                   Margin="22,16,26,24"
+                   FontSize="14"
+                   LineHeight="18"
+                   FontWeight="SemiBold"
+                   Foreground="#FF5A3A18"
+                   TextWrapping="Wrap"
+                   TextTrimming="CharacterEllipsis"
+                   TextAlignment="Center"
+                   VerticalAlignment="Center" />
+    </Grid>
+</UserControl>

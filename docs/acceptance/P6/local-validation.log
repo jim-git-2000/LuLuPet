@@ -1,0 +1,26 @@
+P6 local validation
+
+Passed:
+
+- python3 -m json.tool assets/dialogues/lines.json
+- dotnet build src/LuluPet.Core/LuluPet.Core.csproj --no-restore
+- dotnet run --project /tmp/lulupet-p6-smoke/P6Smoke.csproj --no-restore
+- dotnet build src/LuluPet.Win32/LuluPet.Win32.csproj --no-restore
+- git diff --check
+
+Smoke test result:
+
+- P6 smoke test passed
+
+Expected local blockers:
+
+- dotnet build src/LuluPet.App/LuluPet.App.csproj --no-restore
+  - Failed because the Ubuntu apt .NET SDK does not include `Microsoft.NET.Sdk.WindowsDesktop`.
+  - Validate this on the GitHub Actions Windows runner.
+
+- dotnet build tests/LuluPet.Core.Tests/LuluPet.Core.Tests.csproj --no-restore
+  - Failed because this offline Ubuntu environment does not have the xUnit NuGet packages restored:
+    - `Microsoft.NET.Test.Sdk (>= 17.11.1)`
+    - `xunit (>= 2.9.2)`
+    - `xunit.runner.visualstudio (>= 2.8.2)`
+  - Validate this on GitHub Actions after `dotnet restore`.

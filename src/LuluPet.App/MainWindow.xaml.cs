@@ -12,6 +12,7 @@ using System.Windows.Threading;
 using LuluPet.Core.Animation;
 using LuluPet.Core.Behavior;
 using LuluPet.Core.Config;
+using LuluPet.Core.Dialogues;
 using Forms = System.Windows.Forms;
 
 namespace LuluPet.App;
@@ -20,26 +21,35 @@ public partial class MainWindow : Window
 {
     private readonly JsonSettingsStore _settingsStore;
     private readonly AppSettings _settings;
+    private readonly DialogueLineProvider _dialogueLineProvider;
     private readonly FrameAnimationPlayer _animationPlayer = new();
     private readonly PetStateMachine _stateMachine = new();
     private readonly DispatcherTimer _animationTimer = new();
     private readonly DispatcherTimer _stateTimer = new();
+    private readonly DispatcherTimer _periodicSpeechTimer = new();
+    private readonly DispatcherTimer _bubbleHideTimer = new();
     private readonly Dictionary<string, BitmapImage> _frameCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly Forms.ToolStripMenuItem _showMenuItem;
     private readonly Forms.ToolStripMenuItem _hideMenuItem;
     private DateTimeOffset _lastAnimationTick;
     private DateTimeOffset _lastStateTick;
+    private DateTimeOffset? _interactionAnimationUntil;
     private int _walkDirection = 1;
     private bool _isExitRequested;
 
     private const double WalkPixelsPerSecond = 36;
+    private static readonly TimeSpan InteractionAnimationDuration = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan BubbleVisibleDuration = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan PeriodicSpeechInterval = TimeSpan.FromSeconds(30);
 
     public MainWindow()
     {
         _settingsStore = new JsonSettingsStore(
             Path.Combine(AppContext.BaseDirectory, "settings.json"));
         _settings = _settingsStore.Load();
+        _dialogueLineProvider = new DialogueLineProvider(
+            Path.Combine(AppContext.BaseDirectory, "Assets", "dialogues", "lines.json"));
 
         InitializeComponent();
         _showMenuItem = new Forms.ToolStripMenuItem("显示", null, (_, _) => ShowPetWindow());
@@ -49,6 +59,7 @@ public partial class MainWindow : Window
         RestoreWindowPosition();
         InitializeAnimation();
         InitializeBehavior();
+        InitializeSpeech();
         UpdateTrayMenuState();
     }
 
@@ -61,8 +72,20 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.Handled)
+        {
+            return;
+        }
+
         if (IsFromCloseButton(e.OriginalSource))
         {
+            return;
+        }
+
+        if (IsFromPetImage(e.OriginalSource))
+        {
+            HandlePetClick();
+            e.Handled = true;
             return;
         }
 
@@ -116,6 +139,8 @@ public partial class MainWindow : Window
 
         _animationTimer.Stop();
         _stateTimer.Stop();
+        _periodicSpeechTimer.Stop();
+        _bubbleHideTimer.Stop();
         SaveWindowPosition();
         DisposeTrayIcon();
         base.OnClosing(e);
@@ -185,6 +210,7 @@ public partial class MainWindow : Window
 
         _lastStateTick = DateTimeOffset.UtcNow;
         _stateTimer.Start();
+        _periodicSpeechTimer.Start();
         UpdateTrayMenuState();
     }
 
@@ -193,6 +219,9 @@ public partial class MainWindow : Window
         SaveWindowPosition();
         _animationTimer.Stop();
         _stateTimer.Stop();
+        _periodicSpeechTimer.Stop();
+        _bubbleHideTimer.Stop();
+        HideSpeechBubble();
         Hide();
         UpdateTrayMenuState();
     }
@@ -222,6 +251,7 @@ public partial class MainWindow : Window
         LoadAction("Idle", "idle", fps: 8);
         LoadAction("Walk", "walk", fps: 12);
         LoadAction("Sleep", "sleep", fps: 8);
+        LoadAction("Happy", "happy", fps: 10);
 
         _animationTimer.Interval = TimeSpan.FromMilliseconds(33);
         _animationTimer.Tick += (_, _) => TickAnimation();
@@ -247,6 +277,19 @@ public partial class MainWindow : Window
         _stateTimer.Tick += (_, _) => TickBehavior();
         _lastStateTick = DateTimeOffset.UtcNow;
         _stateTimer.Start();
+    }
+
+    private void InitializeSpeech()
+    {
+        SpeechBubble.TrySetBackgroundImage(
+            Path.Combine(AppContext.BaseDirectory, "Assets", "ui", "bubble_default.png"));
+
+        _periodicSpeechTimer.Interval = PeriodicSpeechInterval;
+        _periodicSpeechTimer.Tick += (_, _) => ShowRandomSpeech();
+        _periodicSpeechTimer.Start();
+
+        _bubbleHideTimer.Interval = BubbleVisibleDuration;
+        _bubbleHideTimer.Tick += (_, _) => HideSpeechBubble();
     }
 
     private void LoadAction(string actionName, string directoryName, int fps)
@@ -291,6 +334,12 @@ public partial class MainWindow : Window
         {
             MoveWhileWalking(elapsed);
         }
+
+        if (_interactionAnimationUntil is not null && now >= _interactionAnimationUntil.Value)
+        {
+            _interactionAnimationUntil = null;
+            PlayStateAnimation(_stateMachine.CurrentState);
+        }
     }
 
     private void OnPetStateChanged(PetStateChangedEventArgs args)
@@ -306,6 +355,11 @@ public partial class MainWindow : Window
 
     private void PlayStateAnimation(PetState state)
     {
+        if (IsInteractionAnimationActive())
+        {
+            return;
+        }
+
         if (TryPlayAction(state.ToString()))
         {
             return;
@@ -341,6 +395,57 @@ public partial class MainWindow : Window
         }
 
         Left = nextLeft;
+    }
+
+    private void PetImage_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ButtonState != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        HandlePetClick();
+        e.Handled = true;
+    }
+
+    private void HandlePetClick()
+    {
+        _stateMachine.ForceState(PetState.Idle);
+        _interactionAnimationUntil = DateTimeOffset.UtcNow + InteractionAnimationDuration;
+
+        if (!TryPlayAction("Happy"))
+        {
+            TryPlayAction("Idle");
+        }
+
+        ShowRandomSpeech();
+    }
+
+    private bool IsInteractionAnimationActive()
+    {
+        return _interactionAnimationUntil is not null
+            && DateTimeOffset.UtcNow < _interactionAnimationUntil.Value;
+    }
+
+    private void ShowRandomSpeech()
+    {
+        var line = _dialogueLineProvider.GetRandomLine();
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return;
+        }
+
+        SpeechBubble.SetText(line);
+        SpeechBubble.Visibility = Visibility.Visible;
+
+        _bubbleHideTimer.Stop();
+        _bubbleHideTimer.Start();
+    }
+
+    private void HideSpeechBubble()
+    {
+        _bubbleHideTimer.Stop();
+        SpeechBubble.Visibility = Visibility.Collapsed;
     }
 
     private void SetPetFrame(string framePath)
@@ -395,6 +500,16 @@ public partial class MainWindow : Window
 
     private static bool IsFromCloseButton(object originalSource)
     {
+        return IsFromNamedElement(originalSource, "CloseButton");
+    }
+
+    private static bool IsFromPetImage(object originalSource)
+    {
+        return IsFromNamedElement(originalSource, "PetImage");
+    }
+
+    private static bool IsFromNamedElement(object originalSource, string elementName)
+    {
         if (originalSource is not DependencyObject current)
         {
             return false;
@@ -402,7 +517,7 @@ public partial class MainWindow : Window
 
         while (current is not null)
         {
-            if (current is System.Windows.Controls.Button button && button.Name == "CloseButton")
+            if (current is FrameworkElement element && element.Name == elementName)
             {
                 return true;
             }

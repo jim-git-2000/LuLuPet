@@ -23,3 +23,22 @@ assets/pet/sleep/lulu_sleep_0001.png
 
 At runtime, `I`, `W`, and `S` switch between Idle, Walk, and Sleep for manual
 acceptance checks.
+
+## Settings
+
+Use the tray menu item `设置` to change runtime settings. Changes are applied
+immediately and persisted to `settings.json`.
+
+Supported settings:
+
+- `appearance.scale`: pet window scale, clamped to `0.75`-`1.5`
+- `appearance.opacity`: pet window opacity, clamped to `0.35`-`1.0`
+- `audio.volume`: reserved volume setting, clamped to `0.0`-`1.0`
+- `interaction.clickThrough`: enables click-through window style
+- `startup.autoStart`: writes/removes the current-user Windows `Run` value
+
+SQLite runtime data is stored under:
+
+```text
+%LOCALAPPDATA%\LuluPet\data\lulupet.db
+```

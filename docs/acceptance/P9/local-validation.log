@@ -1,0 +1,29 @@
+P9 local validation
+
+Environment:
+- OS: Ubuntu local workspace
+- .NET SDK: 8.0.128
+- Network access: restricted
+
+Passed:
+
+- python3 -m json.tool settings.json
+- git diff --check
+- Static search confirms:
+  - `SettingsWindow` exists and is opened from the tray menu.
+  - `Scale`, `Opacity`, `Volume`, `ClickThrough`, and `AutoStart` settings exist.
+  - `ApplyVisualSettings` applies scale and opacity immediately.
+  - Click-through and auto-start reuse the P7 services.
+  - corrupt/missing PNG frame loading is caught and routed to `MissingAssetFallback`.
+  - README includes the supported settings keys.
+
+Blocked locally:
+
+- dotnet restore/build are still blocked by the P8 `Microsoft.Data.Sqlite` dependency because this environment cannot reach `https://api.nuget.org/v3/index.json`.
+- WPF App build is also blocked locally because the Ubuntu apt .NET SDK does not include `Microsoft.NET.Sdk.WindowsDesktop`.
+
+Expected GitHub validation:
+
+- GitHub Actions Windows runner runs `dotnet restore`.
+- `dotnet test --configuration Release --no-restore` should execute `P9SettingsTests`.
+- `dotnet publish src/LuluPet.App/LuluPet.App.csproj ...` should compile the WPF settings window and package runtime assets.

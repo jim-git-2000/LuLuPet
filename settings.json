@@ -3,6 +3,13 @@
     "left": 1200,
     "top": 650
   },
+  "appearance": {
+    "scale": 1.0,
+    "opacity": 1.0
+  },
+  "audio": {
+    "volume": 0.6
+  },
   "interaction": {
     "clickThrough": false
   },

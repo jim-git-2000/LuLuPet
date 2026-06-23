@@ -67,6 +67,8 @@ public sealed class JsonSettingsStore
     {
         var normalized = settings ?? AppSettings.CreateDefault();
         normalized.Window ??= new WindowSettings();
+        normalized.Appearance ??= new AppearanceSettings();
+        normalized.Audio ??= new AudioSettings();
         normalized.Interaction ??= new InteractionSettings();
         normalized.Startup ??= new StartupSettings();
 
@@ -80,6 +82,32 @@ public sealed class JsonSettingsStore
             normalized.Window.Top = 650;
         }
 
+        normalized.Appearance.Scale = ClampFinite(
+            normalized.Appearance.Scale,
+            min: 0.75,
+            max: 1.5,
+            fallback: 1.0);
+        normalized.Appearance.Opacity = ClampFinite(
+            normalized.Appearance.Opacity,
+            min: 0.35,
+            max: 1.0,
+            fallback: 1.0);
+        normalized.Audio.Volume = ClampFinite(
+            normalized.Audio.Volume,
+            min: 0.0,
+            max: 1.0,
+            fallback: 0.6);
+
         return normalized;
+    }
+
+    private static double ClampFinite(double value, double min, double max, double fallback)
+    {
+        if (!double.IsFinite(value))
+        {
+            return fallback;
+        }
+
+        return Math.Clamp(value, min, max);
     }
 }

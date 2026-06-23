@@ -35,6 +35,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly Forms.ToolStripMenuItem _showMenuItem;
     private readonly Forms.ToolStripMenuItem _hideMenuItem;
+    private readonly Forms.ToolStripMenuItem _settingsMenuItem;
     private readonly Forms.ToolStripMenuItem _clickThroughMenuItem;
     private readonly Forms.ToolStripMenuItem _autoStartMenuItem;
     private DateTimeOffset _lastAnimationTick;
@@ -42,6 +43,7 @@ public partial class MainWindow : System.Windows.Window
     private DateTimeOffset? _interactionAnimationUntil;
     private nint _windowHandle;
     private PetState _initialPetState = PetState.Idle;
+    private SettingsWindow? _settingsWindow;
     private int _walkDirection = 1;
     private bool _isClampingWindow;
     private bool _isExitRequested;
@@ -63,6 +65,7 @@ public partial class MainWindow : System.Windows.Window
         InitializeComponent();
         _showMenuItem = new Forms.ToolStripMenuItem("显示", null, (_, _) => ShowPetWindow());
         _hideMenuItem = new Forms.ToolStripMenuItem("隐藏", null, (_, _) => HidePetWindow());
+        _settingsMenuItem = new Forms.ToolStripMenuItem("设置", null, (_, _) => ShowSettingsWindow());
         _clickThroughMenuItem = new Forms.ToolStripMenuItem("点击穿透", null, (_, _) => ToggleClickThrough())
         {
             CheckOnClick = false
@@ -75,6 +78,7 @@ public partial class MainWindow : System.Windows.Window
 
         InitializeStorage();
         RestoreWindowPosition();
+        ApplyVisualSettings();
         InitializeAnimation();
         InitializeBehavior();
         InitializeSpeech();
@@ -171,6 +175,7 @@ public partial class MainWindow : System.Windows.Window
         var contextMenu = new Forms.ContextMenuStrip();
         contextMenu.Items.Add(_showMenuItem);
         contextMenu.Items.Add(_hideMenuItem);
+        contextMenu.Items.Add(_settingsMenuItem);
         contextMenu.Items.Add(new Forms.ToolStripSeparator());
         contextMenu.Items.Add(_clickThroughMenuItem);
         contextMenu.Items.Add(_autoStartMenuItem);
@@ -261,10 +266,13 @@ public partial class MainWindow : System.Windows.Window
         _hideMenuItem.Enabled = IsVisible;
         _clickThroughMenuItem.Checked = _settings.Interaction.ClickThrough;
         _autoStartMenuItem.Checked = _settings.Startup.AutoStart;
+        _settingsWindow?.ApplySettings(_settings);
     }
 
     private void DisposeTrayIcon()
     {
+        _settingsWindow?.Close();
+        _settingsWindow = null;
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
     }
@@ -349,7 +357,10 @@ public partial class MainWindow : System.Windows.Window
             "pet",
             directoryName);
 
-        _animationPlayer.TryLoadActionFromDirectory(actionName, directoryPath, fps);
+        if (!_animationPlayer.TryLoadActionFromDirectory(actionName, directoryPath, fps))
+        {
+            Debug.WriteLine($"Animation action '{actionName}' has no frames in {directoryPath}.");
+        }
     }
 
     private bool TryPlayAction(string actionName)
@@ -516,16 +527,27 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        var image = new BitmapImage();
-        image.BeginInit();
-        image.CacheOption = BitmapCacheOption.OnLoad;
-        image.UriSource = new Uri(framePath, UriKind.Absolute);
-        image.EndInit();
-        image.Freeze();
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.UriSource = new Uri(framePath, UriKind.Absolute);
+            image.EndInit();
+            image.Freeze();
 
-        _frameCache[framePath] = image;
-        PetImage.Source = image;
-        MissingAssetFallback.Visibility = Visibility.Collapsed;
+            _frameCache[framePath] = image;
+            PetImage.Source = image;
+            MissingAssetFallback.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception exception) when (exception is IOException
+            or ArgumentException
+            or NotSupportedException
+            or InvalidOperationException)
+        {
+            Debug.WriteLine($"Failed to load pet frame '{framePath}': {exception.Message}");
+            MissingAssetFallback.Visibility = Visibility.Visible;
+        }
     }
 
     private void RestoreWindowPosition()
@@ -613,18 +635,76 @@ public partial class MainWindow : System.Windows.Window
 
     private void ToggleClickThrough()
     {
-        _settings.Interaction.ClickThrough = !_settings.Interaction.ClickThrough;
+        SetClickThrough(!_settings.Interaction.ClickThrough);
+    }
+
+    private void ToggleAutoStart()
+    {
+        SetAutoStart(!_settings.Startup.AutoStart);
+    }
+
+    private void ShowSettingsWindow()
+    {
+        if (_settingsWindow is not null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        _settingsWindow = new SettingsWindow(_settings)
+        {
+            Owner = this
+        };
+        _settingsWindow.ScaleChanged += value =>
+        {
+            _settings.Appearance.Scale = value;
+            ApplyVisualSettings();
+            SaveSettings();
+        };
+        _settingsWindow.OpacityChanged += value =>
+        {
+            _settings.Appearance.Opacity = value;
+            ApplyVisualSettings();
+            SaveSettings();
+        };
+        _settingsWindow.VolumeChanged += value =>
+        {
+            _settings.Audio.Volume = value;
+            SaveSettings();
+        };
+        _settingsWindow.ClickThroughChanged += SetClickThrough;
+        _settingsWindow.AutoStartChanged += SetAutoStart;
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show();
+    }
+
+    private void SetClickThrough(bool enabled)
+    {
+        _settings.Interaction.ClickThrough = enabled;
         ApplyWindowStyles();
         SaveSettings();
         UpdateTrayMenuState();
     }
 
-    private void ToggleAutoStart()
+    private void SetAutoStart(bool enabled)
     {
-        _settings.Startup.AutoStart = !_settings.Startup.AutoStart;
+        _settings.Startup.AutoStart = enabled;
         ApplyAutoStartSetting();
         SaveSettings();
         UpdateTrayMenuState();
+    }
+
+    private void ApplyVisualSettings()
+    {
+        var scale = _settings.Appearance.Scale;
+        Width = 340 * scale;
+        Height = 390 * scale;
+        PetImage.Width = 300 * scale;
+        PetImage.Height = 300 * scale;
+        SpeechBubble.Width = 230 * scale;
+        SpeechBubble.Height = 96 * scale;
+        Opacity = _settings.Appearance.Opacity;
+        ClampWindowToWorkArea();
     }
 
     private void ApplyWindowStyles()

@@ -1,0 +1,70 @@
+P5 state machine validation
+
+Environment:
+- OS: Ubuntu local workspace
+- .NET SDK: 8.0.128
+
+Commands:
+
+1. Core build
+
+env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+  DOTNET_CLI_HOME=/tmp/lulupet-dotnet-home \
+  NUGET_PACKAGES=/tmp/lulupet-nuget \
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+  DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1 \
+  dotnet build src/LuluPet.Core/LuluPet.Core.csproj --no-restore
+
+Result:
+- Build succeeded.
+- 0 warnings.
+- 0 errors.
+
+2. Package-free state machine smoke test
+
+Temporary project:
+- `/tmp/lulupet-p5-smoke/P5Smoke.csproj`
+- References `src/LuluPet.Core/LuluPet.Core.csproj`
+- Uses no NuGet test packages.
+
+Command:
+
+dotnet restore /tmp/lulupet-p5-smoke/P5Smoke.csproj \
+  --configfile /tmp/lulupet-offline-nuget.config
+
+dotnet run --project /tmp/lulupet-p5-smoke/P5Smoke.csproj --no-restore
+
+Result:
+- P5 smoke test passed.
+
+Smoke test coverage:
+- Idle -> Walk when walk probability succeeds.
+- Walk -> Idle after fixed walk duration.
+- Long Idle -> Sleep when sleep probability succeeds.
+- Sleep -> Idle after fixed sleep duration.
+- Walk does not reset cumulative awake time; Sleep can still occur after walking.
+- StateChanged transition order for Idle -> Walk -> Idle.
+
+3. xUnit project build/test status
+
+Command:
+
+dotnet build tests/LuluPet.Core.Tests/LuluPet.Core.Tests.csproj --no-restore
+
+Result:
+- Blocked locally by missing NuGet packages in the offline Ubuntu environment:
+  - `Microsoft.NET.Test.Sdk (>= 17.11.1)`
+  - `xunit (>= 2.9.2)`
+  - `xunit.runner.visualstudio (>= 2.8.2)`
+- The xUnit tests were added to `tests/LuluPet.Core.Tests/PetStateMachineTests.cs`.
+- GitHub Actions should restore these packages on the Windows runner before running `dotnet test`.
+
+4. App project build status
+
+Command:
+
+dotnet build src/LuluPet.App/LuluPet.App.csproj --no-restore
+
+Result:
+- Blocked locally because the Ubuntu apt .NET SDK does not include `Microsoft.NET.Sdk.WindowsDesktop`.
+- Expected Windows runner validation path: GitHub Actions `windows-latest`.

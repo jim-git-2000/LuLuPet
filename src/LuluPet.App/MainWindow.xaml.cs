@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Windows;
@@ -9,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using LuluPet.Core.Animation;
+using LuluPet.Core.Behavior;
 using LuluPet.Core.Config;
 using Forms = System.Windows.Forms;
 
@@ -19,13 +21,19 @@ public partial class MainWindow : Window
     private readonly JsonSettingsStore _settingsStore;
     private readonly AppSettings _settings;
     private readonly FrameAnimationPlayer _animationPlayer = new();
+    private readonly PetStateMachine _stateMachine = new();
     private readonly DispatcherTimer _animationTimer = new();
+    private readonly DispatcherTimer _stateTimer = new();
     private readonly Dictionary<string, BitmapImage> _frameCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly Forms.ToolStripMenuItem _showMenuItem;
     private readonly Forms.ToolStripMenuItem _hideMenuItem;
     private DateTimeOffset _lastAnimationTick;
+    private DateTimeOffset _lastStateTick;
+    private int _walkDirection = 1;
     private bool _isExitRequested;
+
+    private const double WalkPixelsPerSecond = 36;
 
     public MainWindow()
     {
@@ -40,6 +48,7 @@ public partial class MainWindow : Window
 
         RestoreWindowPosition();
         InitializeAnimation();
+        InitializeBehavior();
         UpdateTrayMenuState();
     }
 
@@ -74,17 +83,20 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.I)
         {
-            TryPlayAction("Idle");
+            _stateMachine.ForceState(PetState.Idle);
+            PlayStateAnimation(PetState.Idle);
         }
 
         if (e.Key == Key.W)
         {
-            TryPlayAction("Walk");
+            _stateMachine.ForceState(PetState.Walk);
+            PlayStateAnimation(PetState.Walk);
         }
 
         if (e.Key == Key.S)
         {
-            TryPlayAction("Sleep");
+            _stateMachine.ForceState(PetState.Sleep);
+            PlayStateAnimation(PetState.Sleep);
         }
     }
 
@@ -103,6 +115,7 @@ public partial class MainWindow : Window
         }
 
         _animationTimer.Stop();
+        _stateTimer.Stop();
         SaveWindowPosition();
         DisposeTrayIcon();
         base.OnClosing(e);
@@ -170,6 +183,8 @@ public partial class MainWindow : Window
             _animationTimer.Start();
         }
 
+        _lastStateTick = DateTimeOffset.UtcNow;
+        _stateTimer.Start();
         UpdateTrayMenuState();
     }
 
@@ -177,6 +192,7 @@ public partial class MainWindow : Window
     {
         SaveWindowPosition();
         _animationTimer.Stop();
+        _stateTimer.Stop();
         Hide();
         UpdateTrayMenuState();
     }
@@ -223,6 +239,16 @@ public partial class MainWindow : Window
         Loaded += (_, _) => Keyboard.Focus(this);
     }
 
+    private void InitializeBehavior()
+    {
+        _stateMachine.StateChanged += (_, args) => OnPetStateChanged(args);
+
+        _stateTimer.Interval = TimeSpan.FromMilliseconds(100);
+        _stateTimer.Tick += (_, _) => TickBehavior();
+        _lastStateTick = DateTimeOffset.UtcNow;
+        _stateTimer.Start();
+    }
+
     private void LoadAction(string actionName, string directoryName, int fps)
     {
         var directoryPath = Path.Combine(
@@ -251,6 +277,70 @@ public partial class MainWindow : Window
         var elapsed = now - _lastAnimationTick;
         _lastAnimationTick = now;
         _animationPlayer.Tick(elapsed);
+    }
+
+    private void TickBehavior()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var elapsed = now - _lastStateTick;
+        _lastStateTick = now;
+
+        _stateMachine.Tick(elapsed);
+
+        if (_stateMachine.CurrentState == PetState.Walk)
+        {
+            MoveWhileWalking(elapsed);
+        }
+    }
+
+    private void OnPetStateChanged(PetStateChangedEventArgs args)
+    {
+        Debug.WriteLine($"LuluPet state: {args.PreviousState} -> {args.CurrentState}");
+        PlayStateAnimation(args.CurrentState);
+
+        if (args.CurrentState == PetState.Walk)
+        {
+            _walkDirection = Random.Shared.Next(0, 2) == 0 ? -1 : 1;
+        }
+    }
+
+    private void PlayStateAnimation(PetState state)
+    {
+        if (TryPlayAction(state.ToString()))
+        {
+            return;
+        }
+
+        if (state != PetState.Idle)
+        {
+            TryPlayAction(PetState.Idle.ToString());
+        }
+    }
+
+    private void MoveWhileWalking(TimeSpan elapsed)
+    {
+        if (elapsed <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        var workArea = SystemParameters.WorkArea;
+        var nextLeft = Left + _walkDirection * WalkPixelsPerSecond * elapsed.TotalSeconds;
+        var minLeft = workArea.Left;
+        var maxLeft = Math.Max(workArea.Left, workArea.Right - ActualWidth);
+
+        if (nextLeft <= minLeft)
+        {
+            nextLeft = minLeft;
+            _walkDirection = 1;
+        }
+        else if (nextLeft >= maxLeft)
+        {
+            nextLeft = maxLeft;
+            _walkDirection = -1;
+        }
+
+        Left = nextLeft;
     }
 
     private void SetPetFrame(string framePath)

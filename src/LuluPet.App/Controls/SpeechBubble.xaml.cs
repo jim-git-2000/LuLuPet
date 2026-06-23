@@ -1,11 +1,10 @@
 using System.IO;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 
 namespace LuluPet.App.Controls;
 
-public partial class SpeechBubble : UserControl
+public partial class SpeechBubble : System.Windows.Controls.UserControl
 {
     public SpeechBubble()
     {

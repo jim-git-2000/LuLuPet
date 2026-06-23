@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -17,7 +16,7 @@ using Forms = System.Windows.Forms;
 
 namespace LuluPet.App;
 
-public partial class MainWindow : Window
+public partial class MainWindow : System.Windows.Window
 {
     private readonly JsonSettingsStore _settingsStore;
     private readonly AppSettings _settings;

@@ -8,6 +8,13 @@ Passed:
 - dotnet build src/LuluPet.Win32/LuluPet.Win32.csproj --no-restore
 - git diff --check
 
+GitHub Actions publish fix:
+
+- `src/LuluPet.App/Controls/SpeechBubble.xaml.cs` now inherits from `System.Windows.Controls.UserControl` explicitly.
+- `src/LuluPet.App/MainWindow.xaml.cs` now inherits from `System.Windows.Window` explicitly.
+- Removed the unused `System.Windows.Controls` using from `MainWindow.xaml.cs`.
+- This avoids WinForms/WPF ambiguity when `UseWindowsForms=true`.
+
 Smoke test result:
 
 - P6 smoke test passed

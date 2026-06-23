@@ -20,8 +20,11 @@
     <Content Include="..\..\settings.json"
              Link="settings.json"
              CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\assets\icons\app.ico"
-             Link="Assets\icons\app.ico"
+    <Content Include="..\..\assets\icons\*.ico"
+             Link="Assets\icons\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\ui\*.png"
+             Link="Assets\ui\%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\assets\pet\**\*.png"
              Link="Assets\pet\%(RecursiveDir)%(Filename)%(Extension)"

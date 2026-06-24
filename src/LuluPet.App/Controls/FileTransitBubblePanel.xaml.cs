@@ -1,6 +1,9 @@
 using System.Windows;
 using LuluPet.App.Services;
 using LuluPet.Core.FileTransit;
+using WpfDataFormats = System.Windows.DataFormats;
+using WpfDragDropEffects = System.Windows.DragDropEffects;
+using WpfDragEventArgs = System.Windows.DragEventArgs;
 
 namespace LuluPet.App.Controls;
 
@@ -54,47 +57,47 @@ public partial class FileTransitBubblePanel : System.Windows.Controls.UserContro
         OpenFolderRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void FileTransitPanel_DragEnter(object sender, DragEventArgs e)
+    private void FileTransitPanel_DragEnter(object sender, WpfDragEventArgs e)
     {
         ApplyDragEffects(e);
     }
 
-    private void FileTransitPanel_DragOver(object sender, DragEventArgs e)
+    private void FileTransitPanel_DragOver(object sender, WpfDragEventArgs e)
     {
         ApplyDragEffects(e);
     }
 
-    private void FileTransitPanel_Drop(object sender, DragEventArgs e)
+    private void FileTransitPanel_Drop(object sender, WpfDragEventArgs e)
     {
         if (!TryGetDroppedFiles(e, out var files))
         {
-            e.Effects = DragDropEffects.None;
+            e.Effects = WpfDragDropEffects.None;
             e.Handled = true;
             return;
         }
 
-        e.Effects = DragDropEffects.Copy;
+        e.Effects = WpfDragDropEffects.Copy;
         FilesDropped?.Invoke(this, files);
         e.Handled = true;
     }
 
-    private static void ApplyDragEffects(DragEventArgs e)
+    private static void ApplyDragEffects(WpfDragEventArgs e)
     {
         e.Effects = TryGetDroppedFiles(e, out _)
-            ? DragDropEffects.Copy
-            : DragDropEffects.None;
+            ? WpfDragDropEffects.Copy
+            : WpfDragDropEffects.None;
         e.Handled = true;
     }
 
-    private static bool TryGetDroppedFiles(DragEventArgs e, out IReadOnlyList<string> files)
+    private static bool TryGetDroppedFiles(WpfDragEventArgs e, out IReadOnlyList<string> files)
     {
         files = Array.Empty<string>();
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+        if (!e.Data.GetDataPresent(WpfDataFormats.FileDrop))
         {
             return false;
         }
 
-        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths)
+        if (e.Data.GetData(WpfDataFormats.FileDrop) is not string[] paths)
         {
             return false;
         }

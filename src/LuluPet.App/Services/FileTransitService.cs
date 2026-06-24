@@ -30,6 +30,29 @@ public sealed class FileTransitService
         return new FileTransitSnapshot(_folderPath, items);
     }
 
+    public int AddFiles(IEnumerable<string> paths)
+    {
+        EnsureFolderExists();
+
+        var copiedCount = 0;
+        foreach (var path in paths)
+        {
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            var destinationPath = FileTransitPathResolver.GetAvailableDestinationPath(
+                _folderPath,
+                Path.GetFileName(path),
+                File.Exists);
+            File.Copy(path, destinationPath, overwrite: false);
+            copiedCount++;
+        }
+
+        return copiedCount;
+    }
+
     public void OpenFolder()
     {
         EnsureFolderExists();

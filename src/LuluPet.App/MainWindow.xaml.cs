@@ -608,6 +608,7 @@ public partial class MainWindow : System.Windows.Window
     {
         FileTransitPanel.CloseRequested += (_, _) => HideActiveToolPanel();
         FileTransitPanel.OpenFolderRequested += (_, _) => OpenFileTransitFolder();
+        FileTransitPanel.FilesDropped += (_, paths) => AddFilesToTransit(paths);
         UpdateFileTransitPanelState();
     }
 
@@ -1403,6 +1404,7 @@ public partial class MainWindow : System.Windows.Window
             FileTransitPanel.ApplySnapshot(_fileTransitService.LoadSnapshot());
         }
         catch (Exception exception) when (exception is IOException
+            or ArgumentException
             or UnauthorizedAccessException
             or NotSupportedException
             or System.Security.SecurityException)
@@ -1419,12 +1421,35 @@ public partial class MainWindow : System.Windows.Window
             UpdateFileTransitPanelState();
         }
         catch (Exception exception) when (exception is IOException
+            or ArgumentException
             or UnauthorizedAccessException
             or NotSupportedException
             or InvalidOperationException
             or System.Security.SecurityException)
         {
             Debug.WriteLine($"Failed to open file transit folder: {exception.Message}");
+        }
+    }
+
+    private void AddFilesToTransit(IReadOnlyList<string> paths)
+    {
+        try
+        {
+            var copiedCount = _fileTransitService.AddFiles(paths);
+            UpdateFileTransitPanelState();
+            FileTransitPanel.SetStatus(copiedCount > 0
+                ? $"已暂存 {copiedCount} 个文件"
+                : "未发现可暂存的文件");
+        }
+        catch (Exception exception) when (exception is IOException
+            or ArgumentException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or InvalidOperationException
+            or System.Security.SecurityException)
+        {
+            Debug.WriteLine($"Failed to add files to transit folder: {exception.Message}");
+            FileTransitPanel.SetStatus("暂存失败");
         }
     }
 

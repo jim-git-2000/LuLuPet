@@ -3,7 +3,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Width="300"
              Height="292"
-             Focusable="True">
+             Focusable="True"
+             AllowDrop="True"
+             DragEnter="FileTransitPanel_DragEnter"
+             DragOver="FileTransitPanel_DragOver"
+             Drop="FileTransitPanel_Drop">
     <Border Background="#FAFFFFFF"
             BorderBrush="#FFE6C56F"
             BorderThickness="1"
@@ -23,7 +27,9 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="10" />
                 <RowDefinition Height="*" />
-                <RowDefinition Height="10" />
+                <RowDefinition Height="8" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="4" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
@@ -117,9 +123,16 @@
                            VerticalAlignment="Center" />
             </Grid>
 
-            <TextBlock x:Name="FolderText"
+            <TextBlock x:Name="StatusText"
                        Grid.Row="6"
                        FontSize="12"
+                       Foreground="#FF5A3A18"
+                       TextTrimming="CharacterEllipsis"
+                       HorizontalAlignment="Stretch" />
+
+            <TextBlock x:Name="FolderText"
+                       Grid.Row="8"
+                       FontSize="11"
                        Foreground="#FF8A642A"
                        TextTrimming="CharacterEllipsis"
                        HorizontalAlignment="Stretch" />

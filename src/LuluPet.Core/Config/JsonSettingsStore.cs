@@ -84,7 +84,7 @@ public sealed class JsonSettingsStore
 
         normalized.Appearance.Scale = ClampFinite(
             normalized.Appearance.Scale,
-            min: 0.75,
+            min: 0.3,
             max: 1.5,
             fallback: 1.0);
         normalized.Appearance.Opacity = ClampFinite(

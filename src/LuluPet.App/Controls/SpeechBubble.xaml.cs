@@ -16,6 +16,17 @@ public partial class SpeechBubble : System.Windows.Controls.UserControl
         BubbleText.Text = text;
     }
 
+    public void ApplyScale(double scale)
+    {
+        BubbleText.FontSize = 14 * scale;
+        BubbleText.LineHeight = 18 * scale;
+        BubbleText.Margin = new Thickness(
+            22 * scale,
+            16 * scale,
+            26 * scale,
+            24 * scale);
+    }
+
     public void TrySetBackgroundImage(string imagePath)
     {
         if (!File.Exists(imagePath))

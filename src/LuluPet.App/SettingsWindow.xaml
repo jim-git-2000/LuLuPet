@@ -40,7 +40,7 @@
                        Foreground="#FF374151" />
             <Slider x:Name="ScaleSlider"
                     Grid.Column="1"
-                    Minimum="0.75"
+                    Minimum="0.3"
                     Maximum="1.5"
                     TickFrequency="0.05"
                     IsSnapToTickEnabled="True"

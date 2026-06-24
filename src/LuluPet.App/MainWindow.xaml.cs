@@ -49,7 +49,6 @@ public partial class MainWindow : System.Windows.Window
     private double _dragStartTop;
     private double _walkVelocityX = WalkPixelsPerSecond;
     private double _walkVelocityY;
-    private TimeSpan _walkRetargetRemaining;
     private bool _isClampingWindow;
     private bool _isPotentialDrag;
     private bool _isDraggingWindow;
@@ -65,10 +64,9 @@ public partial class MainWindow : System.Windows.Window
     private static readonly TimeSpan InteractionAnimationDuration = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan BubbleVisibleDuration = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan PeriodicSpeechInterval = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan MinWalkRetargetInterval = TimeSpan.FromMilliseconds(900);
-    private static readonly TimeSpan MaxWalkRetargetInterval = TimeSpan.FromMilliseconds(2400);
     private const string WalkSpeechText = "（桌面巡逻中）";
     private const string AngrySpeechText = "人，再敲打你哦！";
+    private const string EatSpeechText = "开饭啦！";
 
     public MainWindow()
     {
@@ -275,6 +273,12 @@ public partial class MainWindow : System.Windows.Window
 
     private Icon LoadTrayIcon()
     {
+        var executableIcon = TryLoadIconFromExecutable();
+        if (executableIcon is not null)
+        {
+            return executableIcon;
+        }
+
         var iconPath = FindFirstExistingIconPath("tray_light.ico", "app.ico");
         if (iconPath is null)
         {
@@ -292,6 +296,31 @@ public partial class MainWindow : System.Windows.Window
         catch (IOException)
         {
             return SystemIcons.Application;
+        }
+    }
+
+    private static Icon? TryLoadIconFromExecutable()
+    {
+        var executablePath = Environment.ProcessPath
+            ?? Process.GetCurrentProcess().MainModule?.FileName;
+
+        if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Icon.ExtractAssociatedIcon(executablePath);
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or IOException
+            or UnauthorizedAccessException
+            or InvalidOperationException
+            or Win32Exception)
+        {
+            Debug.WriteLine($"Failed to extract tray icon from executable '{executablePath}': {exception.Message}");
+            return null;
         }
     }
 
@@ -568,12 +597,6 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        _walkRetargetRemaining -= elapsed;
-        if (_walkRetargetRemaining <= TimeSpan.Zero)
-        {
-            RetargetWalkMotion();
-        }
-
         var workArea = SystemParameters.WorkArea;
         var width = ActualWidth > 0 ? ActualWidth : Width;
         var height = ActualHeight > 0 ? ActualHeight : Height;
@@ -583,41 +606,50 @@ public partial class MainWindow : System.Windows.Window
         var minTop = workArea.Top;
         var maxLeft = Math.Max(workArea.Left, workArea.Right - width);
         var maxTop = Math.Max(workArea.Top, workArea.Bottom - height);
+        var reachedBoundary = false;
 
         if (nextLeft <= minLeft)
         {
             nextLeft = minLeft;
-            _walkVelocityX = Math.Abs(_walkVelocityX);
+            reachedBoundary = true;
         }
         else if (nextLeft >= maxLeft)
         {
             nextLeft = maxLeft;
-            _walkVelocityX = -Math.Abs(_walkVelocityX);
+            reachedBoundary = true;
         }
 
         if (nextTop <= minTop)
         {
             nextTop = minTop;
-            _walkVelocityY = Math.Abs(_walkVelocityY);
+            reachedBoundary = true;
         }
         else if (nextTop >= maxTop)
         {
             nextTop = maxTop;
-            _walkVelocityY = -Math.Abs(_walkVelocityY);
+            reachedBoundary = true;
         }
 
         UpdatePetFacing(_walkVelocityX);
         Left = nextLeft;
         Top = nextTop;
-        ClampWindowToWorkArea();
+
+        if (reachedBoundary)
+        {
+            _stateMachine.ForceState(PetState.Idle);
+        }
+        else
+        {
+            ClampWindowToWorkArea();
+        }
     }
 
     private void BeginWalkMotion()
     {
-        RetargetWalkMotion();
+        ChooseWalkMotion();
     }
 
-    private void RetargetWalkMotion()
+    private void ChooseWalkMotion()
     {
         var x = Random.Shared.NextDouble() * 2 - 1;
         if (Math.Abs(x) < 0.25)
@@ -632,15 +664,6 @@ public partial class MainWindow : System.Windows.Window
 
         _walkVelocityX = x / length * speed;
         _walkVelocityY = y / length * speed;
-        _walkRetargetRemaining = RandomDuration(MinWalkRetargetInterval, MaxWalkRetargetInterval);
-    }
-
-    private static TimeSpan RandomDuration(TimeSpan minDuration, TimeSpan maxDuration)
-    {
-        var minMilliseconds = minDuration.TotalMilliseconds;
-        var maxMilliseconds = maxDuration.TotalMilliseconds;
-        return TimeSpan.FromMilliseconds(
-            minMilliseconds + Random.Shared.NextDouble() * (maxMilliseconds - minMilliseconds));
     }
 
     private void BeginPotentialDrag(System.Windows.Input.MouseButtonEventArgs e)
@@ -702,7 +725,7 @@ public partial class MainWindow : System.Windows.Window
             TryPlayAction("Happy");
         }
 
-        var message = ShowSpeech("开饭啦！");
+        var message = ShowSpeech(EatSpeechText);
         RecordInteraction("feed", message);
     }
 
@@ -747,7 +770,8 @@ public partial class MainWindow : System.Windows.Window
     {
         var normalizedLine = line.Trim();
         return string.Equals(normalizedLine, WalkSpeechText, StringComparison.Ordinal)
-            || string.Equals(normalizedLine, AngrySpeechText, StringComparison.Ordinal);
+            || string.Equals(normalizedLine, AngrySpeechText, StringComparison.Ordinal)
+            || string.Equals(normalizedLine, EatSpeechText, StringComparison.Ordinal);
     }
 
     private string ShowSpeech(string line, bool autoHide = true)
@@ -973,6 +997,7 @@ public partial class MainWindow : System.Windows.Window
         PetImage.Height = 300 * scale;
         SpeechBubble.Width = 230 * scale;
         SpeechBubble.Height = 96 * scale;
+        SpeechBubble.ApplyScale(scale);
         Opacity = _settings.Appearance.Opacity;
         ClampWindowToWorkArea();
     }

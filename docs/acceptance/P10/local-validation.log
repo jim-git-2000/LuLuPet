@@ -9,6 +9,7 @@ Date: 2026-06-24
 - workflow structural check for restore/test/publish/artifact/release steps: passed
 - workflow packaging check: release artifact is a versioned zip package instead of a standalone exe
 - package content checks cover `LuluPet.exe`, `Assets/pet`, `Assets/ui`, `Assets/icons`, and `settings.json`
+- app publish metadata check: runtime resources now set both `CopyToOutputDirectory=PreserveNewest` and `CopyToPublishDirectory=PreserveNewest`
 
 ## Tests
 

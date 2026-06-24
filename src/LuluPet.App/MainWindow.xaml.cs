@@ -38,7 +38,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly DispatcherTimer _reminderTimer = new();
     private readonly DispatcherTimer _companionTimer = new();
     private readonly ReminderScheduler _reminderScheduler;
-    private readonly IDesktopBoundsProvider _desktopBoundsProvider = new WpfDesktopBoundsProvider();
+    private readonly IDesktopBoundsProvider _desktopBoundsProvider;
     private readonly Dictionary<string, BitmapImage> _frameCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly Forms.ToolStripMenuItem _showMenuItem;
@@ -104,6 +104,7 @@ public partial class MainWindow : System.Windows.Window
         _reminderScheduler = new ReminderScheduler(_settings.Reminders);
 
         InitializeComponent();
+        _desktopBoundsProvider = new WpfDesktopBoundsProvider(this);
         ApplyWindowIcon();
         _showMenuItem = new Forms.ToolStripMenuItem("显示", null, (_, _) => ShowPetWindow());
         _hideMenuItem = new Forms.ToolStripMenuItem("隐藏", null, (_, _) => HidePetWindow());
@@ -1557,6 +1558,11 @@ public partial class MainWindow : System.Windows.Window
     private void ClampWindowToWorkArea()
     {
         if (_isClampingWindow)
+        {
+            return;
+        }
+
+        if (PresentationSource.FromVisual(this)?.CompositionTarget is null)
         {
             return;
         }

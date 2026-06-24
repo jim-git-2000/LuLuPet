@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using LuluPet.Win32;
+using WpfTextDataFormat = System.Windows.TextDataFormat;
 
 namespace LuluPet.App.Services;
 
@@ -77,12 +78,12 @@ public sealed class ClipboardMonitor : IDisposable
     {
         try
         {
-            if (!System.Windows.Clipboard.ContainsText(TextDataFormat.UnicodeText))
+            if (!System.Windows.Clipboard.ContainsText(WpfTextDataFormat.UnicodeText))
             {
                 return;
             }
 
-            var text = System.Windows.Clipboard.GetText(TextDataFormat.UnicodeText);
+            var text = System.Windows.Clipboard.GetText(WpfTextDataFormat.UnicodeText);
             if (!string.IsNullOrWhiteSpace(text))
             {
                 TextChanged?.Invoke(this, text);

@@ -12,7 +12,8 @@
         ShowInTaskbar="False"
         Topmost="True"
         WindowStartupLocation="Manual"
-        Focusable="True">
+        Focusable="True"
+        Icon="Assets/icons/app.ico">
     <Grid Background="Transparent">
         <controls:SpeechBubble x:Name="SpeechBubble"
                                HorizontalAlignment="Center"
@@ -25,7 +26,14 @@
                Stretch="Uniform"
                HorizontalAlignment="Center"
                VerticalAlignment="Bottom"
-               Margin="0,0,0,10" />
+               Margin="0,0,0,10"
+               RenderTransformOrigin="0.5,0.5">
+            <Image.RenderTransform>
+                <ScaleTransform x:Name="PetMirrorTransform"
+                                ScaleX="1"
+                                ScaleY="1" />
+            </Image.RenderTransform>
+        </Image>
         <Border x:Name="MissingAssetFallback"
                 Width="220"
                 Height="88"
@@ -50,13 +58,5 @@
                            HorizontalAlignment="Center" />
             </StackPanel>
         </Border>
-        <Button x:Name="CloseButton"
-                Content="x"
-                Width="28"
-                Height="28"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Top"
-                Margin="0,8,8,0"
-                Click="CloseButton_Click" />
     </Grid>
 </Window>

@@ -47,19 +47,28 @@ public partial class MainWindow : System.Windows.Window
     private System.Windows.Point _dragStartScreenPoint;
     private double _dragStartLeft;
     private double _dragStartTop;
-    private int _walkDirection = 1;
+    private double _walkVelocityX = WalkPixelsPerSecond;
+    private double _walkVelocityY;
+    private TimeSpan _walkRetargetRemaining;
     private bool _isClampingWindow;
     private bool _isPotentialDrag;
     private bool _isDraggingWindow;
     private bool _isDragAnimationActive;
     private bool _dragStartedOnPet;
+    private bool _isWalkSpeechVisible;
     private bool _isExitRequested;
 
     private const double WalkPixelsPerSecond = 36;
+    private const double MinWalkPixelsPerSecond = 22;
+    private const double MaxWalkPixelsPerSecond = 64;
     private const double DragThreshold = 4;
     private static readonly TimeSpan InteractionAnimationDuration = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan BubbleVisibleDuration = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan PeriodicSpeechInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MinWalkRetargetInterval = TimeSpan.FromMilliseconds(900);
+    private static readonly TimeSpan MaxWalkRetargetInterval = TimeSpan.FromMilliseconds(2400);
+    private const string WalkSpeechText = "（桌面巡逻中）";
+    private const string AngrySpeechText = "人，再敲打你哦！";
 
     public MainWindow()
     {
@@ -108,11 +117,6 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        if (IsFromCloseButton(e.OriginalSource))
-        {
-            return;
-        }
-
         if (e.ClickCount >= 2 && IsFromPetImage(e.OriginalSource))
         {
             HandlePetDoubleClick();
@@ -121,6 +125,19 @@ public partial class MainWindow : System.Windows.Window
         }
 
         BeginPotentialDrag(e);
+        e.Handled = true;
+    }
+
+    protected override void OnMouseRightButtonUp(System.Windows.Input.MouseButtonEventArgs e)
+    {
+        base.OnMouseRightButtonUp(e);
+
+        if (e.Handled || !IsFromPetImage(e.OriginalSource))
+        {
+            return;
+        }
+
+        TriggerEat();
         e.Handled = true;
     }
 
@@ -145,6 +162,7 @@ public partial class MainWindow : System.Windows.Window
         }
 
         _isDraggingWindow = true;
+        UpdatePetFacing(deltaX);
         StartDragAnimation();
         Left = _dragStartLeft + deltaX;
         Top = _dragStartTop + deltaY;
@@ -191,8 +209,16 @@ public partial class MainWindow : System.Windows.Window
 
         if (e.Key == Key.W)
         {
+            var wasWalking = _stateMachine.CurrentState == PetState.Walk;
             _stateMachine.ForceState(PetState.Walk);
             PlayStateAnimation(PetState.Walk);
+
+            if (wasWalking)
+            {
+                BeginWalkMotion();
+                ShowSpeech(WalkSpeechText, autoHide: false);
+                _isWalkSpeechVisible = true;
+            }
         }
 
         if (e.Key == Key.S)
@@ -200,11 +226,7 @@ public partial class MainWindow : System.Windows.Window
             _stateMachine.ForceState(PetState.Sleep);
             PlayStateAnimation(PetState.Sleep);
         }
-    }
 
-    private void CloseButton_Click(object sender, System.Windows.RoutedEventArgs e)
-    {
-        Close();
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -252,9 +274,8 @@ public partial class MainWindow : System.Windows.Window
 
     private Icon LoadTrayIcon()
     {
-        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "icons", "app.ico");
-
-        if (!File.Exists(iconPath))
+        var iconPath = FindFirstExistingIconPath("tray_light.ico", "app.ico");
+        if (iconPath is null)
         {
             return SystemIcons.Application;
         }
@@ -271,6 +292,20 @@ public partial class MainWindow : System.Windows.Window
         {
             return SystemIcons.Application;
         }
+    }
+
+    private static string? FindFirstExistingIconPath(params string[] fileNames)
+    {
+        foreach (var fileName in fileNames)
+        {
+            var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "icons", fileName);
+            if (File.Exists(iconPath))
+            {
+                return iconPath;
+            }
+        }
+
+        return null;
     }
 
     private void ShowPetWindow()
@@ -341,6 +376,7 @@ public partial class MainWindow : System.Windows.Window
         LoadAction("Walk", "walk", fps: 12);
         LoadAction("Sleep", "sleep", fps: 8);
         LoadAction("Happy", "happy", fps: 10);
+        LoadAction("Eat", "eat", fps: 10);
         LoadAction("Drag", "drag", fps: 12);
         LoadAction("Angry", "angry", fps: 10);
         LoadAction("Surprised", "surprised", fps: 10);
@@ -469,7 +505,13 @@ public partial class MainWindow : System.Windows.Window
 
         if (args.CurrentState == PetState.Walk)
         {
-            _walkDirection = Random.Shared.Next(0, 2) == 0 ? -1 : 1;
+            BeginWalkMotion();
+            ShowSpeech(WalkSpeechText, autoHide: false);
+            _isWalkSpeechVisible = true;
+        }
+        else if (args.PreviousState == PetState.Walk && _isWalkSpeechVisible)
+        {
+            HideSpeechBubble();
         }
     }
 
@@ -498,24 +540,79 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
+        _walkRetargetRemaining -= elapsed;
+        if (_walkRetargetRemaining <= TimeSpan.Zero)
+        {
+            RetargetWalkMotion();
+        }
+
         var workArea = SystemParameters.WorkArea;
-        var nextLeft = Left + _walkDirection * WalkPixelsPerSecond * elapsed.TotalSeconds;
+        var width = ActualWidth > 0 ? ActualWidth : Width;
+        var height = ActualHeight > 0 ? ActualHeight : Height;
+        var nextLeft = Left + _walkVelocityX * elapsed.TotalSeconds;
+        var nextTop = Top + _walkVelocityY * elapsed.TotalSeconds;
         var minLeft = workArea.Left;
-        var maxLeft = Math.Max(workArea.Left, workArea.Right - ActualWidth);
+        var minTop = workArea.Top;
+        var maxLeft = Math.Max(workArea.Left, workArea.Right - width);
+        var maxTop = Math.Max(workArea.Top, workArea.Bottom - height);
 
         if (nextLeft <= minLeft)
         {
             nextLeft = minLeft;
-            _walkDirection = 1;
+            _walkVelocityX = Math.Abs(_walkVelocityX);
         }
         else if (nextLeft >= maxLeft)
         {
             nextLeft = maxLeft;
-            _walkDirection = -1;
+            _walkVelocityX = -Math.Abs(_walkVelocityX);
         }
 
+        if (nextTop <= minTop)
+        {
+            nextTop = minTop;
+            _walkVelocityY = Math.Abs(_walkVelocityY);
+        }
+        else if (nextTop >= maxTop)
+        {
+            nextTop = maxTop;
+            _walkVelocityY = -Math.Abs(_walkVelocityY);
+        }
+
+        UpdatePetFacing(_walkVelocityX);
         Left = nextLeft;
+        Top = nextTop;
         ClampWindowToWorkArea();
+    }
+
+    private void BeginWalkMotion()
+    {
+        RetargetWalkMotion();
+    }
+
+    private void RetargetWalkMotion()
+    {
+        var x = Random.Shared.NextDouble() * 2 - 1;
+        if (Math.Abs(x) < 0.25)
+        {
+            x = Math.CopySign(0.25, x == 0 ? 1 : x);
+        }
+
+        var y = (Random.Shared.NextDouble() * 2 - 1) * 0.55;
+        var length = Math.Sqrt(x * x + y * y);
+        var speed = MinWalkPixelsPerSecond
+            + Random.Shared.NextDouble() * (MaxWalkPixelsPerSecond - MinWalkPixelsPerSecond);
+
+        _walkVelocityX = x / length * speed;
+        _walkVelocityY = y / length * speed;
+        _walkRetargetRemaining = RandomDuration(MinWalkRetargetInterval, MaxWalkRetargetInterval);
+    }
+
+    private static TimeSpan RandomDuration(TimeSpan minDuration, TimeSpan maxDuration)
+    {
+        var minMilliseconds = minDuration.TotalMilliseconds;
+        var maxMilliseconds = maxDuration.TotalMilliseconds;
+        return TimeSpan.FromMilliseconds(
+            minMilliseconds + Random.Shared.NextDouble() * (maxMilliseconds - minMilliseconds));
     }
 
     private void BeginPotentialDrag(System.Windows.Input.MouseButtonEventArgs e)
@@ -567,6 +664,20 @@ public partial class MainWindow : System.Windows.Window
         RecordInteraction("click", message);
     }
 
+    private void TriggerEat()
+    {
+        _stateMachine.ForceState(PetState.Idle);
+        _interactionAnimationUntil = DateTimeOffset.UtcNow + InteractionAnimationDuration;
+
+        if (!TryPlayAction("Eat"))
+        {
+            TryPlayAction("Happy");
+        }
+
+        var message = ShowSpeech("开饭啦！");
+        RecordInteraction("feed", message);
+    }
+
     private void HandlePetDoubleClick()
     {
         _isPotentialDrag = false;
@@ -583,7 +694,8 @@ public partial class MainWindow : System.Windows.Window
             TryPlayAction("Idle");
         }
 
-        RecordInteraction("double_click", "angry");
+        var message = ShowSpeech(AngrySpeechText);
+        RecordInteraction("double_click", message);
     }
 
     private bool IsInteractionAnimationActive()
@@ -595,22 +707,40 @@ public partial class MainWindow : System.Windows.Window
     private string? ShowRandomSpeech()
     {
         var line = _dialogueLineProvider.GetRandomLine();
-        if (string.IsNullOrWhiteSpace(line))
+        if (string.IsNullOrWhiteSpace(line) || IsReservedSpeech(line))
         {
             return null;
         }
 
+        return ShowSpeech(line);
+    }
+
+    private static bool IsReservedSpeech(string line)
+    {
+        var normalizedLine = line.Trim();
+        return string.Equals(normalizedLine, WalkSpeechText, StringComparison.Ordinal)
+            || string.Equals(normalizedLine, AngrySpeechText, StringComparison.Ordinal);
+    }
+
+    private string ShowSpeech(string line, bool autoHide = true)
+    {
+        _isWalkSpeechVisible = !autoHide && line == WalkSpeechText;
         SpeechBubble.SetText(line);
         SpeechBubble.Visibility = Visibility.Visible;
 
         _bubbleHideTimer.Stop();
-        _bubbleHideTimer.Start();
+        if (autoHide)
+        {
+            _bubbleHideTimer.Start();
+        }
+
         return line;
     }
 
     private void HideSpeechBubble()
     {
         _bubbleHideTimer.Stop();
+        _isWalkSpeechVisible = false;
         SpeechBubble.Visibility = Visibility.Collapsed;
     }
 
@@ -650,6 +780,16 @@ public partial class MainWindow : System.Windows.Window
             Debug.WriteLine($"Failed to load pet frame '{framePath}': {exception.Message}");
             MissingAssetFallback.Visibility = Visibility.Visible;
         }
+    }
+
+    private void UpdatePetFacing(double horizontalDirection)
+    {
+        if (Math.Abs(horizontalDirection) < 0.1)
+        {
+            return;
+        }
+
+        PetMirrorTransform.ScaleX = horizontalDirection < 0 ? -1 : 1;
     }
 
     private void RestoreWindowPosition()
@@ -890,11 +1030,6 @@ public partial class MainWindow : System.Windows.Window
         catch (UnauthorizedAccessException)
         {
         }
-    }
-
-    private static bool IsFromCloseButton(object originalSource)
-    {
-        return IsFromNamedElement(originalSource, "CloseButton");
     }
 
     private static bool IsFromPetImage(object originalSource)

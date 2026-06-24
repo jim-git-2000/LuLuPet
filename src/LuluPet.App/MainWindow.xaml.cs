@@ -311,7 +311,7 @@ public partial class MainWindow : System.Windows.Window
 
         try
         {
-            return Icon.ExtractAssociatedIcon(executablePath);
+            return System.Drawing.Icon.ExtractAssociatedIcon(executablePath);
         }
         catch (Exception exception) when (exception is ArgumentException
             or IOException

@@ -19,6 +19,12 @@
                                VerticalAlignment="Top"
                                Margin="0,8,0,0"
                                Visibility="Collapsed" />
+        <controls:ReminderBubblePanel x:Name="ReminderPanel"
+                                      Panel.ZIndex="20"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Top"
+                                      Margin="0,8,0,0"
+                                      Visibility="Collapsed" />
         <Image x:Name="PetImage"
                Width="300"
                Height="300"

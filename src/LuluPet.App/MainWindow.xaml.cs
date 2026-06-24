@@ -13,6 +13,7 @@ using LuluPet.Core.Animation;
 using LuluPet.Core.Behavior;
 using LuluPet.Core.Config;
 using LuluPet.Core.Dialogues;
+using LuluPet.Core.Reminders;
 using LuluPet.Core.Storage;
 using LuluPet.Win32;
 using Forms = System.Windows.Forms;
@@ -56,6 +57,8 @@ public partial class MainWindow : System.Windows.Window
     private bool _dragStartedOnPet;
     private bool _isWalkSpeechVisible;
     private bool _isExitRequested;
+    private bool _isReminderPanelOpen;
+    private bool _didDisableClickThroughForReminderPanel;
 
     private const double WalkPixelsPerSecond = 36;
     private const double MinWalkPixelsPerSecond = 22;
@@ -98,6 +101,7 @@ public partial class MainWindow : System.Windows.Window
         InitializeAnimation();
         InitializeBehavior();
         InitializeSpeech();
+        InitializeReminderPanel();
         InitializeWin32();
         UpdateTrayMenuState();
     }
@@ -112,6 +116,11 @@ public partial class MainWindow : System.Windows.Window
         }
 
         if (e.Handled)
+        {
+            return;
+        }
+
+        if (IsFromReminderPanel(e.OriginalSource))
         {
             return;
         }
@@ -226,6 +235,11 @@ public partial class MainWindow : System.Windows.Window
             PlayStateAnimation(PetState.Sleep);
         }
 
+        if (e.Key == Key.F)
+        {
+            ToggleReminderPanel();
+            e.Handled = true;
+        }
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -481,6 +495,47 @@ public partial class MainWindow : System.Windows.Window
 
         _bubbleHideTimer.Interval = BubbleVisibleDuration;
         _bubbleHideTimer.Tick += (_, _) => HideSpeechBubble();
+    }
+
+    private void InitializeReminderPanel()
+    {
+        ReminderPanel.ApplySettings(_settings.Reminders);
+        ReminderPanel.CloseRequested += (_, _) => HideReminderPanel();
+        ReminderPanel.PomodoroEnabledChanged += (_, value) =>
+        {
+            _settings.Reminders.PomodoroEnabled = value;
+            SaveReminderSettings();
+        };
+        ReminderPanel.PomodoroMinutesChanged += (_, value) =>
+        {
+            _settings.Reminders.PomodoroMinutes = value;
+            SaveReminderSettings();
+        };
+        ReminderPanel.PomodoroRestMinutesChanged += (_, value) =>
+        {
+            _settings.Reminders.PomodoroRestMinutes = value;
+            SaveReminderSettings();
+        };
+        ReminderPanel.WaterReminderEnabledChanged += (_, value) =>
+        {
+            _settings.Reminders.WaterReminderEnabled = value;
+            SaveReminderSettings();
+        };
+        ReminderPanel.WaterReminderMinutesChanged += (_, value) =>
+        {
+            _settings.Reminders.WaterReminderMinutes = value;
+            SaveReminderSettings();
+        };
+        ReminderPanel.StandReminderEnabledChanged += (_, value) =>
+        {
+            _settings.Reminders.StandReminderEnabled = value;
+            SaveReminderSettings();
+        };
+        ReminderPanel.StandReminderMinutesChanged += (_, value) =>
+        {
+            _settings.Reminders.StandReminderMinutes = value;
+            SaveReminderSettings();
+        };
     }
 
     private void InitializeWin32()
@@ -796,6 +851,63 @@ public partial class MainWindow : System.Windows.Window
         SpeechBubble.Visibility = Visibility.Collapsed;
     }
 
+    private void ToggleReminderPanel()
+    {
+        if (_isReminderPanelOpen)
+        {
+            HideReminderPanel();
+            return;
+        }
+
+        ShowReminderPanel();
+    }
+
+    private void ShowReminderPanel()
+    {
+        ReminderSettings.Normalize(_settings.Reminders);
+        ReminderPanel.ApplySettings(_settings.Reminders);
+        HideSpeechBubble();
+        ReminderPanel.Visibility = Visibility.Visible;
+        _isReminderPanelOpen = true;
+        ApplyVisualSettings();
+        FocusReminderPanel();
+
+        if (_settings.Interaction.ClickThrough && _windowHandle != nint.Zero)
+        {
+            try
+            {
+                WindowStyleService.ApplyPetWindowStyles(_windowHandle, clickThrough: false);
+                _didDisableClickThroughForReminderPanel = true;
+            }
+            catch (Win32Exception exception)
+            {
+                Debug.WriteLine($"Failed to disable click-through for reminder panel: {exception.Message}");
+            }
+        }
+    }
+
+    private void HideReminderPanel()
+    {
+        ReminderPanel.Visibility = Visibility.Collapsed;
+        _isReminderPanelOpen = false;
+        ApplyVisualSettings();
+        Keyboard.Focus(this);
+
+        if (!_didDisableClickThroughForReminderPanel)
+        {
+            return;
+        }
+
+        _didDisableClickThroughForReminderPanel = false;
+        ApplyWindowStyles();
+    }
+
+    private void FocusReminderPanel()
+    {
+        ReminderPanel.Focus();
+        Keyboard.Focus(ReminderPanel);
+    }
+
     private void SetPetFrame(string framePath)
     {
         if (!File.Exists(framePath))
@@ -991,13 +1103,22 @@ public partial class MainWindow : System.Windows.Window
     private void ApplyVisualSettings()
     {
         var scale = _settings.Appearance.Scale;
-        Width = 340 * scale;
-        Height = 390 * scale;
+        var windowWidth = 340 * scale;
+        var windowHeight = 390 * scale;
+        if (_isReminderPanelOpen)
+        {
+            windowWidth = Math.Max(windowWidth, 320);
+            windowHeight = Math.Max(windowHeight, 390);
+        }
+
+        Width = windowWidth;
+        Height = windowHeight;
         PetImage.Width = 300 * scale;
         PetImage.Height = 300 * scale;
         SpeechBubble.Width = 230 * scale;
         SpeechBubble.Height = 96 * scale;
         SpeechBubble.ApplyScale(scale);
+        ReminderPanel.ApplyScale(scale);
         Opacity = _settings.Appearance.Opacity;
         ClampWindowToWorkArea();
     }
@@ -1085,9 +1206,21 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
+    private void SaveReminderSettings()
+    {
+        ReminderSettings.Normalize(_settings.Reminders);
+        ReminderPanel.ApplySettings(_settings.Reminders);
+        SaveSettings();
+    }
+
     private static bool IsFromPetImage(object originalSource)
     {
         return IsFromNamedElement(originalSource, "PetImage");
+    }
+
+    private static bool IsFromReminderPanel(object originalSource)
+    {
+        return IsFromNamedElement(originalSource, "ReminderPanel");
     }
 
     private static bool IsFromNamedElement(object originalSource, string elementName)

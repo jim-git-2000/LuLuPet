@@ -55,11 +55,11 @@ public partial class ToggleSwitch : System.Windows.Controls.UserControl
     {
         var targetX = IsChecked ? 22.0 : 0.0;
         Track.Background = new SolidColorBrush(IsChecked
-            ? Color.FromRgb(242, 178, 63)
-            : Color.FromRgb(229, 231, 235));
+            ? System.Windows.Media.Color.FromRgb(242, 178, 63)
+            : System.Windows.Media.Color.FromRgb(229, 231, 235));
         Track.BorderBrush = new SolidColorBrush(IsChecked
-            ? Color.FromRgb(217, 145, 28)
-            : Color.FromRgb(209, 213, 219));
+            ? System.Windows.Media.Color.FromRgb(217, 145, 28)
+            : System.Windows.Media.Color.FromRgb(209, 213, 219));
 
         if (!animate)
         {

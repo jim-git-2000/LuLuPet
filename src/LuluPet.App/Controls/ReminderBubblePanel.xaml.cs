@@ -95,13 +95,13 @@ public partial class ReminderBubblePanel : System.Windows.Controls.UserControl
 
     private void IntegerTextBox_Pasting(object sender, DataObjectPastingEventArgs e)
     {
-        if (!e.DataObject.GetDataPresent(DataFormats.Text))
+        if (!e.DataObject.GetDataPresent(System.Windows.DataFormats.Text))
         {
             e.CancelCommand();
             return;
         }
 
-        var text = e.DataObject.GetData(DataFormats.Text) as string;
+        var text = e.DataObject.GetData(System.Windows.DataFormats.Text) as string;
         if (string.IsNullOrWhiteSpace(text) || !IntegerRegex.IsMatch(text))
         {
             e.CancelCommand();

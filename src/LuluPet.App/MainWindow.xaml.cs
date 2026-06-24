@@ -39,6 +39,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly DispatcherTimer _reminderTimer = new();
     private readonly DispatcherTimer _companionTimer = new();
     private readonly ClipboardHistory _clipboardHistory;
+    private readonly FileTransitService _fileTransitService;
     private readonly ReminderScheduler _reminderScheduler;
     private readonly IDesktopBoundsProvider _desktopBoundsProvider;
     private readonly Dictionary<string, BitmapImage> _frameCache = new(StringComparer.OrdinalIgnoreCase);
@@ -104,6 +105,7 @@ public partial class MainWindow : System.Windows.Window
             Path.Combine(AppContext.BaseDirectory, "Assets", "dialogues", "lines.json"));
         _petRepository = new SqlitePetRepository(LuluPetDataPaths.GetDefaultDatabasePath());
         _clipboardHistory = new ClipboardHistory(_settings.ToolPanels.ClipboardHistoryLimit);
+        _fileTransitService = new FileTransitService(_settings.ToolPanels.FileTransitFolderPath);
         _reminderScheduler = new ReminderScheduler(_settings.Reminders);
 
         InitializeComponent();
@@ -131,6 +133,7 @@ public partial class MainWindow : System.Windows.Window
         InitializeSpeech();
         InitializeReminderPanel();
         InitializeClipboardPanel();
+        InitializeFileTransitPanel();
         InitializeWin32();
         UpdateTrayMenuState();
     }
@@ -599,6 +602,13 @@ public partial class MainWindow : System.Windows.Window
     {
         ClipboardPanel.CloseRequested += (_, _) => HideActiveToolPanel();
         UpdateClipboardPanelState();
+    }
+
+    private void InitializeFileTransitPanel()
+    {
+        FileTransitPanel.CloseRequested += (_, _) => HideActiveToolPanel();
+        FileTransitPanel.OpenFolderRequested += (_, _) => OpenFileTransitFolder();
+        UpdateFileTransitPanelState();
     }
 
     private void InitializeCompanionTime()
@@ -1335,6 +1345,10 @@ public partial class MainWindow : System.Windows.Window
             {
                 UpdateClipboardPanelState();
             }
+            else if (panel == ToolPanelKind.FileTransit)
+            {
+                UpdateFileTransitPanelState();
+            }
 
             return;
         }
@@ -1380,6 +1394,38 @@ public partial class MainWindow : System.Windows.Window
     private void UpdateClipboardPanelState()
     {
         ClipboardPanel.ApplyHistory(_clipboardHistory.Snapshot(), _clipboardHistory.Capacity);
+    }
+
+    private void UpdateFileTransitPanelState()
+    {
+        try
+        {
+            FileTransitPanel.ApplySnapshot(_fileTransitService.LoadSnapshot());
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or System.Security.SecurityException)
+        {
+            Debug.WriteLine($"Failed to load file transit folder: {exception.Message}");
+        }
+    }
+
+    private void OpenFileTransitFolder()
+    {
+        try
+        {
+            _fileTransitService.OpenFolder();
+            UpdateFileTransitPanelState();
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or InvalidOperationException
+            or System.Security.SecurityException)
+        {
+            Debug.WriteLine($"Failed to open file transit folder: {exception.Message}");
+        }
     }
 
     private void StartClipboardMonitor()
@@ -1627,6 +1673,7 @@ public partial class MainWindow : System.Windows.Window
         SpeechBubble.ApplyScale(scale);
         ReminderPanel.ApplyScale(scale);
         ClipboardPanel.ApplyScale(scale);
+        FileTransitPanel.ApplyScale(scale);
         Opacity = _settings.Appearance.Opacity;
         ClampWindowToWorkArea();
     }

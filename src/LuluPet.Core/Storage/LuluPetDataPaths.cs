@@ -2,7 +2,7 @@ namespace LuluPet.Core.Storage;
 
 public static class LuluPetDataPaths
 {
-    public static string GetDefaultDatabasePath()
+    public static string GetDefaultDataDirectory()
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
@@ -11,6 +11,16 @@ public static class LuluPetDataPaths
             localAppData = AppContext.BaseDirectory;
         }
 
-        return Path.Combine(localAppData, "LuluPet", "data", "lulupet.db");
+        return Path.Combine(localAppData, "LuluPet", "data");
+    }
+
+    public static string GetDefaultDatabasePath()
+    {
+        return Path.Combine(GetDefaultDataDirectory(), "lulupet.db");
+    }
+
+    public static string GetDefaultFileTransitFolderPath()
+    {
+        return Path.Combine(GetDefaultDataDirectory(), "Transit");
     }
 }

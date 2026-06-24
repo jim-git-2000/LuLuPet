@@ -80,6 +80,7 @@ public partial class MainWindow : System.Windows.Window
         _petRepository = new SqlitePetRepository(LuluPetDataPaths.GetDefaultDatabasePath());
 
         InitializeComponent();
+        ApplyWindowIcon();
         _showMenuItem = new Forms.ToolStripMenuItem("显示", null, (_, _) => ShowPetWindow());
         _hideMenuItem = new Forms.ToolStripMenuItem("隐藏", null, (_, _) => HidePetWindow());
         _settingsMenuItem = new Forms.ToolStripMenuItem("设置", null, (_, _) => ShowSettingsWindow());
@@ -306,6 +307,33 @@ public partial class MainWindow : System.Windows.Window
         }
 
         return null;
+    }
+
+    private void ApplyWindowIcon()
+    {
+        var iconPath = FindFirstExistingIconPath("app.ico");
+        if (iconPath is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.UriSource = new Uri(iconPath, UriKind.Absolute);
+            image.EndInit();
+            image.Freeze();
+            Icon = image;
+        }
+        catch (Exception exception) when (exception is IOException
+            or ArgumentException
+            or NotSupportedException
+            or InvalidOperationException)
+        {
+            Debug.WriteLine($"Failed to load window icon '{iconPath}': {exception.Message}");
+        }
     }
 
     private void ShowPetWindow()

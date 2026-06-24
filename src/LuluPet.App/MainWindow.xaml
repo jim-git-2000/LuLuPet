@@ -12,8 +12,7 @@
         ShowInTaskbar="False"
         Topmost="True"
         WindowStartupLocation="Manual"
-        Focusable="True"
-        Icon="Assets/icons/app.ico">
+        Focusable="True">
     <Grid Background="Transparent">
         <controls:SpeechBubble x:Name="SpeechBubble"
                                HorizontalAlignment="Center"

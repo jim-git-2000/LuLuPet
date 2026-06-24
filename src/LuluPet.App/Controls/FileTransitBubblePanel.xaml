@@ -70,6 +70,8 @@
                          Background="Transparent"
                          BorderThickness="0"
                          Padding="0"
+                         MouseDoubleClick="FileListBox_MouseDoubleClick"
+                         PreviewMouseRightButtonUp="FileListBox_PreviewMouseRightButtonUp"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemContainerStyle>

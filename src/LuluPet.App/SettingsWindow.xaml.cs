@@ -1,5 +1,8 @@
+using System.IO;
 using System.Windows;
 using LuluPet.Core.Config;
+using LuluPet.Core.Storage;
+using Forms = System.Windows.Forms;
 
 namespace LuluPet.App;
 
@@ -23,6 +26,8 @@ public partial class SettingsWindow : System.Windows.Window
 
     public event Action<bool>? AutoStartChanged;
 
+    public event Action<string>? FileTransitFolderChanged;
+
     public void ApplySettings(AppSettings settings)
     {
         _isInitializing = true;
@@ -33,6 +38,7 @@ public partial class SettingsWindow : System.Windows.Window
             VolumeSlider.Value = settings.Audio.Volume;
             ClickThroughCheckBox.IsChecked = settings.Interaction.ClickThrough;
             AutoStartCheckBox.IsChecked = settings.Startup.AutoStart;
+            UpdateFileTransitFolderText(settings.ToolPanels.FileTransitFolderPath);
             UpdateValueText();
         }
         finally
@@ -87,6 +93,38 @@ public partial class SettingsWindow : System.Windows.Window
         }
     }
 
+    private void BrowseFileTransitFolderButton_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        using var dialog = new Forms.FolderBrowserDialog
+        {
+            Description = "选择文件中转站文件夹",
+            UseDescriptionForTitle = true,
+            SelectedPath = Directory.Exists(FileTransitFolderTextBox.Text)
+                ? FileTransitFolderTextBox.Text
+                : LuluPetDataPaths.GetDefaultFileTransitFolderPath()
+        };
+
+        if (dialog.ShowDialog() != Forms.DialogResult.OK)
+        {
+            return;
+        }
+
+        UpdateFileTransitFolderText(dialog.SelectedPath);
+        if (!_isInitializing)
+        {
+            FileTransitFolderChanged?.Invoke(dialog.SelectedPath);
+        }
+    }
+
+    private void ResetFileTransitFolderButton_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        UpdateFileTransitFolderText(string.Empty);
+        if (!_isInitializing)
+        {
+            FileTransitFolderChanged?.Invoke(string.Empty);
+        }
+    }
+
     private void CloseButton_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         Close();
@@ -104,5 +142,17 @@ public partial class SettingsWindow : System.Windows.Window
         ScaleValueText.Text = $"{ScaleSlider.Value:0.00}x";
         OpacityValueText.Text = $"{OpacitySlider.Value:P0}";
         VolumeValueText.Text = $"{VolumeSlider.Value:P0}";
+    }
+
+    private void UpdateFileTransitFolderText(string? configuredFolderPath)
+    {
+        if (FileTransitFolderTextBox is null)
+        {
+            return;
+        }
+
+        FileTransitFolderTextBox.Text = string.IsNullOrWhiteSpace(configuredFolderPath)
+            ? LuluPetDataPaths.GetDefaultFileTransitFolderPath()
+            : configuredFolderPath;
     }
 }

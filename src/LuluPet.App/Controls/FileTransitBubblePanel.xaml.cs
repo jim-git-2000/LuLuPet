@@ -1,10 +1,13 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using LuluPet.App.Services;
 using LuluPet.Core.FileTransit;
 using WpfDataFormats = System.Windows.DataFormats;
 using WpfDragDropEffects = System.Windows.DragDropEffects;
 using WpfDragEventArgs = System.Windows.DragEventArgs;
+using WpfMouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
 
 namespace LuluPet.App.Controls;
 
@@ -22,11 +25,16 @@ public partial class FileTransitBubblePanel : System.Windows.Controls.UserContro
 
     public event EventHandler<IReadOnlyList<string>>? FilesDropped;
 
+    public event EventHandler<string>? FileOpenRequested;
+
+    public event EventHandler<string>? FileCopyRequested;
+
     public void ApplySnapshot(FileTransitSnapshot snapshot)
     {
         var viewItems = snapshot.Items
             .Select(item => new FileTransitViewItem(
                 item.Name,
+                item.FullPath,
                 FileTransitService.FormatSize(item.SizeBytes),
                 FormatModifiedAt(item.ModifiedAt)))
             .ToArray();
@@ -56,6 +64,24 @@ public partial class FileTransitBubblePanel : System.Windows.Controls.UserContro
     private void OpenFolderButton_Click(object sender, RoutedEventArgs e)
     {
         OpenFolderRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void FileListBox_MouseDoubleClick(object sender, WpfMouseButtonEventArgs e)
+    {
+        if (TryGetFileItem(e.OriginalSource, out var item))
+        {
+            FileOpenRequested?.Invoke(this, item.FullPath);
+            e.Handled = true;
+        }
+    }
+
+    private void FileListBox_PreviewMouseRightButtonUp(object sender, WpfMouseButtonEventArgs e)
+    {
+        if (TryGetFileItem(e.OriginalSource, out var item))
+        {
+            FileCopyRequested?.Invoke(this, item.FullPath);
+            e.Handled = true;
+        }
     }
 
     private void FileTransitPanel_DragEnter(object sender, WpfDragEventArgs e)
@@ -107,6 +133,28 @@ public partial class FileTransitBubblePanel : System.Windows.Controls.UserContro
         return files.Count > 0;
     }
 
+    private static bool TryGetFileItem(object originalSource, out FileTransitViewItem item)
+    {
+        item = default!;
+        if (originalSource is not DependencyObject current)
+        {
+            return false;
+        }
+
+        while (current is not null)
+        {
+            if (current is ListBoxItem { DataContext: FileTransitViewItem viewItem })
+            {
+                item = viewItem;
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
     private static string FormatModifiedAt(DateTimeOffset modifiedAt)
     {
         var localTime = modifiedAt.LocalDateTime;
@@ -117,6 +165,7 @@ public partial class FileTransitBubblePanel : System.Windows.Controls.UserContro
 
     private sealed record FileTransitViewItem(
         string Name,
+        string FullPath,
         string SizeText,
         string ModifiedAtText);
 }

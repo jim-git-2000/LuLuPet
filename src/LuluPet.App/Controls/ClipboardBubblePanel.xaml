@@ -52,6 +52,7 @@
                          Background="Transparent"
                          BorderThickness="0"
                          Padding="0"
+                         SelectionChanged="HistoryListBox_SelectionChanged"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemContainerStyle>

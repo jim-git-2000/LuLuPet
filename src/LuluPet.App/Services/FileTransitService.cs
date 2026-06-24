@@ -7,7 +7,7 @@ namespace LuluPet.App.Services;
 
 public sealed class FileTransitService
 {
-    private readonly string _folderPath;
+    private string _folderPath;
 
     public FileTransitService(string? configuredFolderPath)
     {
@@ -17,6 +17,13 @@ public sealed class FileTransitService
     }
 
     public string FolderPath => _folderPath;
+
+    public void SetFolderPath(string? configuredFolderPath)
+    {
+        _folderPath = string.IsNullOrWhiteSpace(configuredFolderPath)
+            ? LuluPetDataPaths.GetDefaultFileTransitFolderPath()
+            : configuredFolderPath;
+    }
 
     public FileTransitSnapshot LoadSnapshot()
     {
@@ -61,6 +68,22 @@ public sealed class FileTransitService
         var startInfo = new ProcessStartInfo
         {
             FileName = _folderPath,
+            UseShellExecute = true
+        };
+
+        Process.Start(startInfo);
+    }
+
+    public void OpenFile(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = path,
             UseShellExecute = true
         };
 

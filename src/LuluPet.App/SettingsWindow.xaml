@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="LuluPet 设置"
         Width="360"
-        Height="360"
+        Height="430"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -109,6 +109,38 @@
                       Checked="AutoStartCheckBox_Changed"
                       Unchecked="AutoStartCheckBox_Changed" />
         </StackPanel>
+
+        <Grid Grid.Row="9"
+              Margin="0,18,0,18">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="8" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="文件中转站"
+                       Foreground="#FF374151" />
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="52" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="FileTransitFolderTextBox"
+                         Height="28"
+                         IsReadOnly="True"
+                         VerticalContentAlignment="Center" />
+                <Button Grid.Column="2"
+                        Content="选择"
+                        Height="28"
+                        Click="BrowseFileTransitFolderButton_Click" />
+                <Button Grid.Column="4"
+                        Content="默认"
+                        Height="28"
+                        Click="ResetFileTransitFolderButton_Click" />
+            </Grid>
+        </Grid>
 
         <Button Grid.Row="10"
                 Content="关闭"

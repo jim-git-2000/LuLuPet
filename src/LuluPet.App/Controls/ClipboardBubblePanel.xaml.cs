@@ -13,10 +13,13 @@ public partial class ClipboardBubblePanel : System.Windows.Controls.UserControl
 
     public event EventHandler? CloseRequested;
 
+    public event EventHandler<string>? TextSelected;
+
     public void ApplyHistory(IReadOnlyList<ClipboardHistoryItem> items, int capacity)
     {
         var viewItems = items
             .Select(item => new ClipboardHistoryViewItem(
+                item.Text,
                 FormatPreview(item.Text),
                 FormatCapturedAt(item.CapturedAt)))
             .ToArray();
@@ -24,6 +27,11 @@ public partial class ClipboardBubblePanel : System.Windows.Controls.UserControl
         HistoryListBox.ItemsSource = viewItems;
         EmptyText.Visibility = viewItems.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         CountText.Text = $"共 {viewItems.Length} / {capacity}";
+    }
+
+    public void SetStatus(string message)
+    {
+        CountText.Text = message;
     }
 
     public void ApplyScale(double scale)
@@ -35,6 +43,15 @@ public partial class ClipboardBubblePanel : System.Windows.Controls.UserControl
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
         CloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void HistoryListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (HistoryListBox.SelectedItem is ClipboardHistoryViewItem item)
+        {
+            TextSelected?.Invoke(this, item.Text);
+            HistoryListBox.SelectedItem = null;
+        }
     }
 
     private static string FormatPreview(string text)
@@ -52,6 +69,7 @@ public partial class ClipboardBubblePanel : System.Windows.Controls.UserControl
     }
 
     private sealed record ClipboardHistoryViewItem(
+        string Text,
         string Preview,
         string CapturedAtText);
 }

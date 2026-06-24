@@ -21,6 +21,11 @@ using LuluPet.Core.Storage;
 using LuluPet.App.Services;
 using LuluPet.Win32;
 using Forms = System.Windows.Forms;
+using WpfClipboard = System.Windows.Clipboard;
+using WpfDataFormats = System.Windows.DataFormats;
+using WpfDataObject = System.Windows.DataObject;
+using WpfDragDropEffects = System.Windows.DragDropEffects;
+using WpfTextDataFormat = System.Windows.TextDataFormat;
 
 namespace LuluPet.App;
 
@@ -601,6 +606,7 @@ public partial class MainWindow : System.Windows.Window
     private void InitializeClipboardPanel()
     {
         ClipboardPanel.CloseRequested += (_, _) => HideActiveToolPanel();
+        ClipboardPanel.TextSelected += (_, text) => CopyClipboardHistoryText(text);
         UpdateClipboardPanelState();
     }
 
@@ -609,6 +615,8 @@ public partial class MainWindow : System.Windows.Window
         FileTransitPanel.CloseRequested += (_, _) => HideActiveToolPanel();
         FileTransitPanel.OpenFolderRequested += (_, _) => OpenFileTransitFolder();
         FileTransitPanel.FilesDropped += (_, paths) => AddFilesToTransit(paths);
+        FileTransitPanel.FileOpenRequested += (_, path) => OpenFileTransitFile(path);
+        FileTransitPanel.FileCopyRequested += (_, path) => CopyFileTransitFile(path);
         UpdateFileTransitPanelState();
     }
 
@@ -1431,6 +1439,55 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
+    private void OpenFileTransitFile(string path)
+    {
+        try
+        {
+            _fileTransitService.OpenFile(path);
+        }
+        catch (Exception exception) when (exception is IOException
+            or ArgumentException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or InvalidOperationException
+            or System.Security.SecurityException)
+        {
+            Debug.WriteLine($"Failed to open file transit file: {exception.Message}");
+            FileTransitPanel.SetStatus("打开失败");
+        }
+    }
+
+    private void CopyFileTransitFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                FileTransitPanel.SetStatus("文件不存在");
+                return;
+            }
+
+            var dataObject = new WpfDataObject();
+            dataObject.SetData(WpfDataFormats.FileDrop, new[] { path });
+            dataObject.SetData(
+                "Preferred DropEffect",
+                new MemoryStream(BitConverter.GetBytes((int)WpfDragDropEffects.Copy)));
+            WpfClipboard.SetDataObject(dataObject, true);
+            FileTransitPanel.SetStatus("已复制文件");
+        }
+        catch (Exception exception) when (exception is IOException
+            or ArgumentException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or InvalidOperationException
+            or System.Runtime.InteropServices.ExternalException
+            or System.Security.SecurityException)
+        {
+            Debug.WriteLine($"Failed to copy file transit file: {exception.Message}");
+            FileTransitPanel.SetStatus("复制失败");
+        }
+    }
+
     private void AddFilesToTransit(IReadOnlyList<string> paths)
     {
         try
@@ -1450,6 +1507,22 @@ public partial class MainWindow : System.Windows.Window
         {
             Debug.WriteLine($"Failed to add files to transit folder: {exception.Message}");
             FileTransitPanel.SetStatus("暂存失败");
+        }
+    }
+
+    private void CopyClipboardHistoryText(string text)
+    {
+        try
+        {
+            WpfClipboard.SetText(text, WpfTextDataFormat.UnicodeText);
+            ClipboardPanel.SetStatus("已复制到剪切板");
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or InvalidOperationException
+            or System.Runtime.InteropServices.ExternalException)
+        {
+            Debug.WriteLine($"Failed to copy clipboard history text: {exception.Message}");
+            ClipboardPanel.SetStatus("复制失败");
         }
     }
 
@@ -1650,6 +1723,7 @@ public partial class MainWindow : System.Windows.Window
         };
         _settingsWindow.ClickThroughChanged += SetClickThrough;
         _settingsWindow.AutoStartChanged += SetAutoStart;
+        _settingsWindow.FileTransitFolderChanged += SetFileTransitFolder;
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
     }
@@ -1672,6 +1746,15 @@ public partial class MainWindow : System.Windows.Window
         _settings.Startup.AutoStart = enabled;
         ApplyAutoStartSetting();
         SaveSettings();
+        UpdateTrayMenuState();
+    }
+
+    private void SetFileTransitFolder(string folderPath)
+    {
+        _settings.ToolPanels.FileTransitFolderPath = folderPath;
+        _fileTransitService.SetFolderPath(folderPath);
+        SaveSettings();
+        UpdateFileTransitPanelState();
         UpdateTrayMenuState();
     }
 

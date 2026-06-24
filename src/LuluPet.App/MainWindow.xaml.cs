@@ -71,8 +71,7 @@ public partial class MainWindow : System.Windows.Window
     private bool _dragStartedOnPet;
     private bool _isWalkSpeechVisible;
     private bool _isExitRequested;
-    private bool _isReminderPanelOpen;
-    private bool _didDisableClickThroughForReminderPanel;
+    private ToolPanelKind _activeToolPanel = ToolPanelKind.None;
 
     private const double WalkPixelsPerSecond = 36;
     private const double MinWalkPixelsPerSecond = 22;
@@ -84,7 +83,7 @@ public partial class MainWindow : System.Windows.Window
     private const double BasePetImageSize = 300;
     private const double BaseSpeechBubbleWidth = 230;
     private const double BaseSpeechBubbleHeight = 96;
-    private const double ReminderPanelColumnWidth = 324;
+    private const double ToolPanelColumnWidth = 324;
     private const double DragThreshold = 4;
     private static readonly TimeSpan InteractionAnimationDuration = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan BubbleVisibleDuration = TimeSpan.FromSeconds(4);
@@ -145,7 +144,7 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        if (IsFromReminderPanel(e.OriginalSource))
+        if (IsFromToolPanel(e.OriginalSource))
         {
             return;
         }
@@ -262,7 +261,19 @@ public partial class MainWindow : System.Windows.Window
 
         if (e.Key == Key.F)
         {
-            ToggleReminderPanel();
+            ToggleToolPanel(ToolPanelKind.Reminder);
+            e.Handled = true;
+        }
+
+        if (e.Key == Key.C)
+        {
+            ToggleToolPanel(ToolPanelKind.Clipboard);
+            e.Handled = true;
+        }
+
+        if (e.Key == Key.D)
+        {
+            ToggleToolPanel(ToolPanelKind.FileTransit);
             e.Handled = true;
         }
     }
@@ -529,7 +540,7 @@ public partial class MainWindow : System.Windows.Window
     private void InitializeReminderPanel()
     {
         ReminderPanel.ApplySettings(_settings.Reminders);
-        ReminderPanel.CloseRequested += (_, _) => HideReminderPanel();
+        ReminderPanel.CloseRequested += (_, _) => HideActiveToolPanel();
         ReminderPanel.PomodoroEnabledChanged += (_, value) =>
         {
             _settings.Reminders.PomodoroEnabled = value;
@@ -1249,62 +1260,94 @@ public partial class MainWindow : System.Windows.Window
         SpeechBubble.Visibility = Visibility.Collapsed;
     }
 
-    private void ToggleReminderPanel()
+    private void ToggleToolPanel(ToolPanelKind panel)
     {
-        if (_isReminderPanelOpen)
+        if (_settings.Interaction.ClickThrough)
         {
-            HideReminderPanel();
             return;
         }
 
-        ShowReminderPanel();
+        if (_activeToolPanel == panel)
+        {
+            HideActiveToolPanel();
+            return;
+        }
+
+        ShowToolPanel(panel);
     }
 
-    private void ShowReminderPanel()
+    private void ShowToolPanel(ToolPanelKind panel)
     {
+        if (_settings.Interaction.ClickThrough)
+        {
+            return;
+        }
+
+        PrepareToolPanel(panel);
+        HideAllToolPanels();
+        HideSpeechBubble();
+
+        var element = GetToolPanelElement(panel);
+        element.Visibility = Visibility.Visible;
+        _activeToolPanel = panel;
+        ApplyVisualSettings();
+        FocusToolPanel(panel);
+    }
+
+    private void HideActiveToolPanel()
+    {
+        if (_activeToolPanel == ToolPanelKind.None)
+        {
+            return;
+        }
+
+        HideAllToolPanels();
+        _activeToolPanel = ToolPanelKind.None;
+        ApplyVisualSettings();
+        Keyboard.Focus(this);
+    }
+
+    private void HideAllToolPanels()
+    {
+        ReminderPanel.Visibility = Visibility.Collapsed;
+        ClipboardPanel.Visibility = Visibility.Collapsed;
+        FileTransitPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void PrepareToolPanel(ToolPanelKind panel)
+    {
+        if (panel != ToolPanelKind.Reminder)
+        {
+            return;
+        }
+
         ReminderSettings.Normalize(_settings.Reminders);
         ReminderPanel.ApplySettings(_settings.Reminders);
         UpdateReminderPanelState();
-        HideSpeechBubble();
-        ReminderPanel.Visibility = Visibility.Visible;
-        _isReminderPanelOpen = true;
-        ApplyVisualSettings();
-        FocusReminderPanel();
-
-        if (_settings.Interaction.ClickThrough && _windowHandle != nint.Zero)
-        {
-            try
-            {
-                WindowStyleService.ApplyPetWindowStyles(_windowHandle, clickThrough: false);
-                _didDisableClickThroughForReminderPanel = true;
-            }
-            catch (Win32Exception exception)
-            {
-                Debug.WriteLine($"Failed to disable click-through for reminder panel: {exception.Message}");
-            }
-        }
     }
 
-    private void HideReminderPanel()
+    private FrameworkElement GetToolPanelElement(ToolPanelKind panel)
     {
-        ReminderPanel.Visibility = Visibility.Collapsed;
-        _isReminderPanelOpen = false;
-        ApplyVisualSettings();
-        Keyboard.Focus(this);
-
-        if (!_didDisableClickThroughForReminderPanel)
+        return panel switch
         {
-            return;
-        }
-
-        _didDisableClickThroughForReminderPanel = false;
-        ApplyWindowStyles();
+            ToolPanelKind.Reminder => ReminderPanel,
+            ToolPanelKind.Clipboard => ClipboardPanel,
+            ToolPanelKind.FileTransit => FileTransitPanel,
+            _ => throw new ArgumentOutOfRangeException(nameof(panel), panel, null)
+        };
     }
 
-    private void FocusReminderPanel()
+    private void FocusToolPanel(ToolPanelKind panel)
     {
-        ReminderPanel.Focus();
-        Keyboard.Focus(ReminderPanel);
+        var element = GetToolPanelElement(panel);
+        element.Focus();
+        Keyboard.Focus(element);
+    }
+
+    private void ToolPanelCloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        HideActiveToolPanel();
+        e.Handled = true;
     }
 
     private void UpdateReminderPanelState()
@@ -1494,6 +1537,11 @@ public partial class MainWindow : System.Windows.Window
 
     private void SetClickThrough(bool enabled)
     {
+        if (enabled)
+        {
+            HideActiveToolPanel();
+        }
+
         _settings.Interaction.ClickThrough = enabled;
         ApplyWindowStyles();
         SaveSettings();
@@ -1512,10 +1560,10 @@ public partial class MainWindow : System.Windows.Window
     {
         var scale = _settings.Appearance.Scale;
         var petColumnWidth = BaseWindowWidth * scale;
-        var reminderColumnWidth = _isReminderPanelOpen ? ReminderPanelColumnWidth : 0;
-        var windowWidth = petColumnWidth + reminderColumnWidth;
+        var toolPanelColumnWidth = _activeToolPanel != ToolPanelKind.None ? ToolPanelColumnWidth : 0;
+        var windowWidth = petColumnWidth + toolPanelColumnWidth;
         var windowHeight = BaseWindowHeight * scale;
-        if (_isReminderPanelOpen)
+        if (_activeToolPanel != ToolPanelKind.None)
         {
             windowHeight = Math.Max(windowHeight, 390);
         }
@@ -1523,7 +1571,7 @@ public partial class MainWindow : System.Windows.Window
         Width = windowWidth;
         Height = windowHeight;
         PetColumn.Width = new GridLength(petColumnWidth);
-        ReminderColumn.Width = new GridLength(reminderColumnWidth);
+        ToolPanelColumn.Width = new GridLength(toolPanelColumnWidth);
         PetImage.Width = BasePetImageSize * scale;
         PetImage.Height = BasePetImageSize * scale;
         SpeechBubble.Width = BaseSpeechBubbleWidth * scale;
@@ -1664,9 +1712,11 @@ public partial class MainWindow : System.Windows.Window
         return IsFromNamedElement(originalSource, "PetImage");
     }
 
-    private static bool IsFromReminderPanel(object originalSource)
+    private static bool IsFromToolPanel(object originalSource)
     {
-        return IsFromNamedElement(originalSource, "ReminderPanel");
+        return IsFromNamedElement(originalSource, "ReminderPanel")
+            || IsFromNamedElement(originalSource, "ClipboardPanel")
+            || IsFromNamedElement(originalSource, "FileTransitPanel");
     }
 
     private static bool IsFromNamedElement(object originalSource, string elementName)
@@ -1696,4 +1746,12 @@ public partial class MainWindow : System.Windows.Window
         Right,
         Bottom
     }
+}
+
+internal enum ToolPanelKind
+{
+    None,
+    Reminder,
+    Clipboard,
+    FileTransit
 }

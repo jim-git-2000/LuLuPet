@@ -787,7 +787,7 @@ bash scripts/codex/run-phase.sh P9 prompts/p9-settings.txt
 
 1. 固化所有 CI 步骤：`restore`、`test`、`publish`、artifact 校验
 2. 在 tag push 时产出 Release 构建
-3. 生成 `v1.0.0` 标签
+3. 生成 `v1.0.1` 标签
 4. 完成 `README` 的最终安装和运行文档
 5. 整理证据：静态检查结果、日志、artifact 链接、数据库样例、手动验收反馈
 6. 撰写回滚说明
@@ -803,7 +803,7 @@ cat > prompts/p10-release.txt <<'EOF'
    - workflow_dispatch 可手动触发
 2. 增加 artifact 校验脚本，确保 LuluPet.exe 存在
 3. 整理 README 的安装、运行、已知问题、回滚说明
-4. 输出 v1.0.0 发布前检查清单
+4. 输出 v1.0.1 发布前检查清单
 EOF
 
 bash scripts/codex/run-phase.sh P10 prompts/p10-release.txt
@@ -812,7 +812,7 @@ bash scripts/codex/run-phase.sh P10 prompts/p10-release.txt
 **验收标准**
 
 - `main` 分支构建稳定通过
-- 打 `v1.0.0` tag 后，GitHub Release 流程可成功产出 exe
+- 打 `v1.0.1` tag 后，GitHub Release 流程可成功产出 exe
 - 发布文档完整
 - 回滚文档可执行
 
@@ -827,7 +827,7 @@ bash scripts/codex/run-phase.sh P10 prompts/p10-release.txt
 - Release 页面链接
 - artifact 名称、大小、SHA256 摘要
 - CI 运行链接
-- `v1.0.0` 标签提交哈希
+- `v1.0.1` 标签提交哈希
 - 手动验收反馈：下载 Release exe 后完成全流程运行检查
 
 ## 测试、CI、发布与回滚
@@ -936,7 +936,7 @@ jobs:
 | 初始可运行版本 | `v0.1.0` | 能构建并出首个 exe |
 | 新增功能 | `v0.4.0` | 向后兼容的功能增加 |
 | 修复问题 | `v0.4.1` | 向后兼容的 bugfix |
-| 首个正式版 | `v1.0.0` | 功能与验收闭环完成 |
+| 首个正式版 | `v1.0.1` | 功能与验收闭环完成 |
 | 重大不兼容变更 | `v2.0.0` | 公共行为和配置约定发生重大变化 |
 
 SemVer 2.0.0 官方定义了 `MAJOR.MINOR.PATCH` 的递增规则：不兼容改动升主版本，向后兼容功能新增升次版本，向后兼容修复升修订号

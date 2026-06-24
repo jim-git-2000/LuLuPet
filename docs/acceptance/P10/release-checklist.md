@@ -15,23 +15,27 @@
   - verify `publish/win-x64/LuluPet.exe` exists
   - reject suspiciously small exe files under `1MB`
   - write `publish/win-x64/LuluPet.exe.sha256.txt`
-  - upload artifact `LuluPet-win-x64`
+  - package `publish/win-x64` into `LuluPet-win-x64-<version>.zip`
+  - verify the package zip contains `LuluPet.exe`, `Assets/pet`, `Assets/ui`, `Assets/icons`, and `settings.json`
+  - write `LuluPet-win-x64-<version>.zip.sha256.txt`
+  - upload artifact `LuluPet-win-x64-<version>`
 
 ## Tag Release
 
 - Release tag format: `v*`
-- First stable release target: `v1.0.0`
+- First stable release target: `v1.0.1`
 - Tag command:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 - Tag builds create or update a GitHub Release.
 - Release assets:
-  - `LuluPet.exe`
-  - `LuluPet.exe.sha256.txt`
+  - `LuluPet-win-x64-v1.0.1.zip`
+  - `LuluPet-win-x64-v1.0.1.zip.sha256.txt`
+  - GitHub-generated Source code zip/tar.gz
 
 ## Static Checks
 
@@ -54,9 +58,10 @@ git push origin v1.0.0
 
 ## Manual Acceptance
 
-After GitHub Actions produces the artifact or Release asset, download `LuluPet.exe` on Windows and check:
+After GitHub Actions produces the artifact or Release asset, download `LuluPet-win-x64-v1.0.1.zip` on Windows, extract it, and check:
 
 - exe starts by double click
+- packaged `Assets/`, `settings.json`, and `LuluPet.exe` are present in the extracted folder
 - tray icon is visible
 - app icon is embedded in the exe
 - Idle/Walk/Sleep/Happy/Drag/Eat/Angry animations work
@@ -67,11 +72,11 @@ After GitHub Actions produces the artifact or Release asset, download `LuluPet.e
 ## Evidence To Fill After Release
 
 - CI run link:
-- artifact name: `LuluPet-win-x64`
+- artifact name:
 - artifact size:
-- `LuluPet.exe` SHA256:
+- release zip SHA256:
 - Release page link:
-- `v1.0.0` tag commit:
+- `v1.0.1` tag commit:
 - Windows manual acceptance result:
 
 ## Rollback

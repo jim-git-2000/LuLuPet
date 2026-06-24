@@ -17,6 +17,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      PACKAGE_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && format('LuluPet-win-x64-{0}', github.ref_name) || format('LuluPet-win-x64-ci-{0}', github.run_number) }}
 
     steps:
       - name: Checkout
@@ -58,11 +60,60 @@ jobs:
           Get-FileHash "publish/win-x64/LuluPet.exe" -Algorithm SHA256 |
             Tee-Object -FilePath "publish/win-x64/LuluPet.exe.sha256.txt"
 
+      - name: Package release zip
+        shell: pwsh
+        run: |
+          $packageRoot = "publish/package/$env:PACKAGE_NAME"
+          $packageZip = "publish/$env:PACKAGE_NAME.zip"
+          if (Test-Path $packageRoot) {
+            Remove-Item $packageRoot -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $packageRoot | Out-Null
+          Copy-Item "publish/win-x64/*" $packageRoot -Recurse
+
+          if (Test-Path $packageZip) {
+            Remove-Item $packageZip -Force
+          }
+          Compress-Archive -Path "$packageRoot/*" -DestinationPath $packageZip -CompressionLevel Optimal
+
+          $zipFile = Get-Item $packageZip
+          if ($zipFile.Length -lt 1MB) {
+            throw "$packageZip is suspiciously small"
+          }
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($packageZip)
+          try {
+            $entries = $zip.Entries | ForEach-Object { $_.FullName }
+            if (!($entries -contains "LuluPet.exe")) {
+              throw "LuluPet.exe not found in package zip"
+            }
+            if (!($entries | Where-Object { $_ -like "Assets/pet/*" })) {
+              throw "Assets/pet frames not found in package zip"
+            }
+            if (!($entries | Where-Object { $_ -like "Assets/ui/*" })) {
+              throw "Assets/ui files not found in package zip"
+            }
+            if (!($entries | Where-Object { $_ -like "Assets/icons/*" })) {
+              throw "Assets/icons files not found in package zip"
+            }
+            if (!($entries -contains "settings.json")) {
+              throw "settings.json not found in package zip"
+            }
+          } finally {
+            $zip.Dispose()
+          }
+
+          Get-FileHash $packageZip -Algorithm SHA256 |
+            Tee-Object -FilePath "$packageZip.sha256.txt"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LuluPet-win-x64
-          path: publish/win-x64/
+          name: ${{ env.PACKAGE_NAME }}
+          path: |
+            publish/${{ env.PACKAGE_NAME }}.zip
+            publish/${{ env.PACKAGE_NAME }}.zip.sha256.txt
           retention-days: 14
 
       - name: Create GitHub Release
@@ -72,18 +123,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          $packageZip = "publish/$env:PACKAGE_NAME.zip"
           $assets = @(
-            "publish/win-x64/LuluPet.exe",
-            "publish/win-x64/LuluPet.exe.sha256.txt"
+            $packageZip,
+            "$packageZip.sha256.txt"
           )
           $notes = @(
             "LuluPet $env:RELEASE_TAG",
             "",
             "Assets:",
-            "- LuluPet.exe: Windows x64 self-contained executable",
-            "- LuluPet.exe.sha256.txt: SHA256 checksum",
+            "- $env:PACKAGE_NAME.zip: Windows x64 package including LuluPet.exe, Assets, and settings.json",
+            "- $env:PACKAGE_NAME.zip.sha256.txt: SHA256 checksum",
             "",
-            "Manual acceptance should be completed on a Windows desktop after download."
+            "GitHub also provides Source code zip/tar.gz automatically for this tag.",
+            "",
+            "Download the zip, extract it, then run LuluPet.exe from the extracted folder."
           ) -join [Environment]::NewLine
 
           if (gh release view $env:RELEASE_TAG 2>$null) {

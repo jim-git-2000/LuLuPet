@@ -16,6 +16,8 @@ public sealed class AppSettings
 
     public ReminderSettings Reminders { get; set; } = new();
 
+    public ToolPanelSettings ToolPanels { get; set; } = new();
+
     public static AppSettings CreateDefault()
     {
         return new AppSettings();

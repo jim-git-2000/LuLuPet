@@ -73,6 +73,7 @@ public sealed class JsonSettingsStore
         normalized.Interaction ??= new InteractionSettings();
         normalized.Startup ??= new StartupSettings();
         normalized.Reminders ??= new ReminderSettings();
+        normalized.ToolPanels ??= new ToolPanelSettings();
 
         if (!double.IsFinite(normalized.Window.Left))
         {
@@ -100,6 +101,7 @@ public sealed class JsonSettingsStore
             max: 1.0,
             fallback: 0.6);
         ReminderSettings.Normalize(normalized.Reminders);
+        ToolPanelSettings.Normalize(normalized.ToolPanels);
 
         return normalized;
     }

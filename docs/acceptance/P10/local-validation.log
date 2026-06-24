@@ -10,6 +10,7 @@ Date: 2026-06-24
 - workflow packaging check: release artifact is a versioned zip package instead of a standalone exe
 - package content checks cover `LuluPet.exe`, `Assets/pet`, `Assets/ui`, `Assets/icons`, and `settings.json`
 - app publish metadata check: runtime resources now set both `CopyToOutputDirectory=PreserveNewest` and `CopyToPublishDirectory=PreserveNewest`
+- workflow runtime asset copy check: publish output is explicitly populated from `assets/icons`, `assets/ui`, `assets/dialogues`, `assets/pet`, and `settings.json` before verification and zip packaging
 
 ## Tests
 

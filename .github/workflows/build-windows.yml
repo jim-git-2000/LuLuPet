@@ -46,6 +46,39 @@ jobs:
           /p:EnableWindowsTargeting=true
           -o publish/win-x64
 
+      - name: Copy runtime assets
+        shell: pwsh
+        run: |
+          $publishDir = "publish/win-x64"
+          $assetsDir = Join-Path $publishDir "Assets"
+
+          New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
+
+          $assetGroups = @(
+            @{ Source = "assets/icons"; Target = "Assets/icons" },
+            @{ Source = "assets/ui"; Target = "Assets/ui" },
+            @{ Source = "assets/dialogues"; Target = "Assets/dialogues" },
+            @{ Source = "assets/pet"; Target = "Assets/pet" }
+          )
+
+          foreach ($assetGroup in $assetGroups) {
+            $source = $assetGroup.Source
+            $target = Join-Path $publishDir $assetGroup.Target
+
+            if (!(Test-Path $source)) {
+              throw "Required asset source not found: $source"
+            }
+
+            if (Test-Path $target) {
+              Remove-Item $target -Recurse -Force
+            }
+
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+            Copy-Item (Join-Path $source "*") $target -Recurse -Force
+          }
+
+          Copy-Item "settings.json" (Join-Path $publishDir "settings.json") -Force
+
       - name: Verify artifact
         shell: pwsh
         run: |
@@ -59,6 +92,21 @@ jobs:
           }
           Get-FileHash "publish/win-x64/LuluPet.exe" -Algorithm SHA256 |
             Tee-Object -FilePath "publish/win-x64/LuluPet.exe.sha256.txt"
+
+          $requiredPaths = @(
+            "publish/win-x64/Assets/icons/app.ico",
+            "publish/win-x64/Assets/ui/bubble_default.png",
+            "publish/win-x64/Assets/dialogues/lines.json",
+            "publish/win-x64/Assets/pet/idle/lulu_idle_0001.png",
+            "publish/win-x64/settings.json"
+          )
+
+          foreach ($requiredPath in $requiredPaths) {
+            if (!(Test-Path $requiredPath)) {
+              Get-ChildItem "publish/win-x64" -Recurse | Select-Object FullName, Length
+              throw "Required runtime asset not found: $requiredPath"
+            }
+          }
 
       - name: Package release zip
         shell: pwsh

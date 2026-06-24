@@ -51,6 +51,7 @@ public partial class MainWindow : System.Windows.Window
     private bool _isClampingWindow;
     private bool _isPotentialDrag;
     private bool _isDraggingWindow;
+    private bool _isDragAnimationActive;
     private bool _dragStartedOnPet;
     private bool _isExitRequested;
 
@@ -112,6 +113,13 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
+        if (e.ClickCount >= 2 && IsFromPetImage(e.OriginalSource))
+        {
+            HandlePetDoubleClick();
+            e.Handled = true;
+            return;
+        }
+
         BeginPotentialDrag(e);
         e.Handled = true;
     }
@@ -137,6 +145,7 @@ public partial class MainWindow : System.Windows.Window
         }
 
         _isDraggingWindow = true;
+        StartDragAnimation();
         Left = _dragStartLeft + deltaX;
         Top = _dragStartTop + deltaY;
         ClampWindowToWorkArea();
@@ -157,6 +166,7 @@ public partial class MainWindow : System.Windows.Window
         if (_isDraggingWindow)
         {
             SaveWindowPosition();
+            StopDragAnimation();
         }
         else if (_dragStartedOnPet)
         {
@@ -331,6 +341,9 @@ public partial class MainWindow : System.Windows.Window
         LoadAction("Walk", "walk", fps: 12);
         LoadAction("Sleep", "sleep", fps: 8);
         LoadAction("Happy", "happy", fps: 10);
+        LoadAction("Drag", "drag", fps: 12);
+        LoadAction("Angry", "angry", fps: 10);
+        LoadAction("Surprised", "surprised", fps: 10);
 
         _animationTimer.Interval = TimeSpan.FromMilliseconds(33);
         _animationTimer.Tick += (_, _) => TickAnimation();
@@ -462,7 +475,7 @@ public partial class MainWindow : System.Windows.Window
 
     private void PlayStateAnimation(PetState state)
     {
-        if (IsInteractionAnimationActive())
+        if (_isDragAnimationActive || IsInteractionAnimationActive())
         {
             return;
         }
@@ -516,6 +529,30 @@ public partial class MainWindow : System.Windows.Window
         CaptureMouse();
     }
 
+    private void StartDragAnimation()
+    {
+        if (_isDragAnimationActive)
+        {
+            return;
+        }
+
+        if (TryPlayAction("Drag"))
+        {
+            _isDragAnimationActive = true;
+        }
+    }
+
+    private void StopDragAnimation()
+    {
+        if (!_isDragAnimationActive)
+        {
+            return;
+        }
+
+        _isDragAnimationActive = false;
+        PlayStateAnimation(_stateMachine.CurrentState);
+    }
+
     private void HandlePetClick()
     {
         _stateMachine.ForceState(PetState.Idle);
@@ -528,6 +565,25 @@ public partial class MainWindow : System.Windows.Window
 
         var message = ShowRandomSpeech();
         RecordInteraction("click", message);
+    }
+
+    private void HandlePetDoubleClick()
+    {
+        _isPotentialDrag = false;
+        _isDraggingWindow = false;
+        _isDragAnimationActive = false;
+        _dragStartedOnPet = false;
+        ReleaseMouseCapture();
+
+        _stateMachine.ForceState(PetState.Idle);
+        _interactionAnimationUntil = DateTimeOffset.UtcNow + InteractionAnimationDuration;
+
+        if (!TryPlayAction("Angry") && !TryPlayAction("Surprised"))
+        {
+            TryPlayAction("Idle");
+        }
+
+        RecordInteraction("double_click", "angry");
     }
 
     private bool IsInteractionAnimationActive()

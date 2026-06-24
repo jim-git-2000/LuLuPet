@@ -15,5 +15,14 @@
   },
   "startup": {
     "autoStart": false
+  },
+  "reminders": {
+    "pomodoroEnabled": false,
+    "pomodoroMinutes": 25,
+    "pomodoroRestMinutes": 5,
+    "waterReminderEnabled": true,
+    "waterReminderMinutes": 45,
+    "standReminderEnabled": true,
+    "standReminderMinutes": 60
   }
 }

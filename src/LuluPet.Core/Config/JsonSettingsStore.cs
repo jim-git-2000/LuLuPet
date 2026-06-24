@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LuluPet.Core.Reminders;
 
 namespace LuluPet.Core.Config;
 
@@ -71,6 +72,7 @@ public sealed class JsonSettingsStore
         normalized.Audio ??= new AudioSettings();
         normalized.Interaction ??= new InteractionSettings();
         normalized.Startup ??= new StartupSettings();
+        normalized.Reminders ??= new ReminderSettings();
 
         if (!double.IsFinite(normalized.Window.Left))
         {
@@ -97,6 +99,7 @@ public sealed class JsonSettingsStore
             min: 0.0,
             max: 1.0,
             fallback: 0.6);
+        ReminderSettings.Normalize(normalized.Reminders);
 
         return normalized;
     }

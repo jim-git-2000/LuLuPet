@@ -1,3 +1,5 @@
+using LuluPet.Core.Reminders;
+
 namespace LuluPet.Core.Config;
 
 public sealed class AppSettings
@@ -11,6 +13,8 @@ public sealed class AppSettings
     public InteractionSettings Interaction { get; set; } = new();
 
     public StartupSettings Startup { get; set; } = new();
+
+    public ReminderSettings Reminders { get; set; } = new();
 
     public static AppSettings CreateDefault()
     {

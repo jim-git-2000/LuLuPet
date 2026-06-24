@@ -17,6 +17,8 @@ public static class NativeMethods
     public const uint SwpNoActivate = 0x0010;
     public const uint SwpNoOwnerZOrder = 0x0200;
 
+    public const int WmClipboardUpdate = 0x031D;
+
     public static nint GetWindowLongPtr(nint hwnd, int index)
     {
         return Environment.Is64BitProcess
@@ -53,4 +55,12 @@ public static class NativeMethods
         int cx,
         int cy,
         uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool AddClipboardFormatListener(nint hwnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool RemoveClipboardFormatListener(nint hwnd);
 }

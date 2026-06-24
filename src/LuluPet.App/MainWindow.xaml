@@ -35,70 +35,13 @@
                                       VerticalAlignment="Bottom"
                                       Margin="8,0,16,10"
                                       Visibility="Collapsed" />
-        <Border x:Name="ClipboardPanel"
-                Grid.Column="1"
-                Panel.ZIndex="20"
-                Width="300"
-                Height="292"
-                Focusable="True"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Bottom"
-                Margin="8,0,16,10"
-                Background="#FAFFFFFF"
-                BorderBrush="#FFE6C56F"
-                BorderThickness="1"
-                CornerRadius="8"
-                Padding="16,14"
-                SnapsToDevicePixels="True"
-                Visibility="Collapsed">
-            <Border.Effect>
-                <DropShadowEffect Color="#7F5A3A18"
-                                  BlurRadius="12"
-                                  ShadowDepth="3"
-                                  Opacity="0.18" />
-            </Border.Effect>
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="16" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="12" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="剪切板"
-                               FontSize="17"
-                               FontWeight="SemiBold"
-                               Foreground="#FF5A3A18"
-                               VerticalAlignment="Center" />
-                    <Button Grid.Column="1"
-                            Width="24"
-                            Height="24"
-                            Content="x"
-                            FontSize="13"
-                            FontWeight="SemiBold"
-                            Foreground="#FF7C5A2C"
-                            Background="Transparent"
-                            BorderBrush="Transparent"
-                            Click="ToolPanelCloseButton_Click" />
-                </Grid>
-                <TextBlock Grid.Row="2"
-                           Text="剪切板历史将在 P19 接入。"
-                           TextWrapping="Wrap"
-                           Foreground="#FF6B4B21"
-                           VerticalAlignment="Center"
-                           HorizontalAlignment="Center" />
-                <TextBlock Grid.Row="4"
-                           Text="C"
-                           FontSize="12"
-                           Foreground="#FF8A642A"
-                           HorizontalAlignment="Right" />
-            </Grid>
-        </Border>
+        <controls:ClipboardBubblePanel x:Name="ClipboardPanel"
+                                       Grid.Column="1"
+                                       Panel.ZIndex="20"
+                                       HorizontalAlignment="Left"
+                                       VerticalAlignment="Bottom"
+                                       Margin="8,0,16,10"
+                                       Visibility="Collapsed" />
         <Border x:Name="FileTransitPanel"
                 Grid.Column="1"
                 Panel.ZIndex="20"

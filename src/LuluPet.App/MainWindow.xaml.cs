@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using LuluPet.Core;
 using LuluPet.Core.Animation;
 using LuluPet.Core.Behavior;
+using LuluPet.Core.Clipboard;
 using LuluPet.Core.Companion;
 using LuluPet.Core.Config;
 using LuluPet.Core.Desktop;
@@ -37,6 +38,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly DispatcherTimer _bubbleHideTimer = new();
     private readonly DispatcherTimer _reminderTimer = new();
     private readonly DispatcherTimer _companionTimer = new();
+    private readonly ClipboardHistory _clipboardHistory;
     private readonly ReminderScheduler _reminderScheduler;
     private readonly IDesktopBoundsProvider _desktopBoundsProvider;
     private readonly Dictionary<string, BitmapImage> _frameCache = new(StringComparer.OrdinalIgnoreCase);
@@ -52,6 +54,7 @@ public partial class MainWindow : System.Windows.Window
     private DateTimeOffset _lastCompanionTick;
     private DateTimeOffset? _interactionAnimationUntil;
     private CompanionTimeTracker? _companionTracker;
+    private ClipboardMonitor? _clipboardMonitor;
     private nint _windowHandle;
     private PetState _initialPetState = PetState.Idle;
     private SettingsWindow? _settingsWindow;
@@ -100,6 +103,7 @@ public partial class MainWindow : System.Windows.Window
         _dialogueLineProvider = new DialogueLineProvider(
             Path.Combine(AppContext.BaseDirectory, "Assets", "dialogues", "lines.json"));
         _petRepository = new SqlitePetRepository(LuluPetDataPaths.GetDefaultDatabasePath());
+        _clipboardHistory = new ClipboardHistory(_settings.ToolPanels.ClipboardHistoryLimit);
         _reminderScheduler = new ReminderScheduler(_settings.Reminders);
 
         InitializeComponent();
@@ -126,6 +130,7 @@ public partial class MainWindow : System.Windows.Window
         InitializeBehavior();
         InitializeSpeech();
         InitializeReminderPanel();
+        InitializeClipboardPanel();
         InitializeWin32();
         UpdateTrayMenuState();
     }
@@ -293,6 +298,7 @@ public partial class MainWindow : System.Windows.Window
         _bubbleHideTimer.Stop();
         _reminderTimer.Stop();
         _companionTimer.Stop();
+        _clipboardMonitor?.Dispose();
         SaveCompanionElapsed();
         SaveWindowPosition();
         DisposeTrayIcon();
@@ -589,6 +595,12 @@ public partial class MainWindow : System.Windows.Window
         UpdateReminderPanelState();
     }
 
+    private void InitializeClipboardPanel()
+    {
+        ClipboardPanel.CloseRequested += (_, _) => HideActiveToolPanel();
+        UpdateClipboardPanelState();
+    }
+
     private void InitializeCompanionTime()
     {
         var localDate = GetCurrentLocalDate();
@@ -618,6 +630,7 @@ public partial class MainWindow : System.Windows.Window
         {
             _windowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             ApplyWindowStyles();
+            StartClipboardMonitor();
             ClampWindowToWorkArea();
         };
 
@@ -1318,6 +1331,11 @@ public partial class MainWindow : System.Windows.Window
     {
         if (panel != ToolPanelKind.Reminder)
         {
+            if (panel == ToolPanelKind.Clipboard)
+            {
+                UpdateClipboardPanelState();
+            }
+
             return;
         }
 
@@ -1357,6 +1375,36 @@ public partial class MainWindow : System.Windows.Window
             _reminderScheduler.PomodoroRemaining,
             _reminderScheduler.WaterRemaining,
             _reminderScheduler.StandRemaining);
+    }
+
+    private void UpdateClipboardPanelState()
+    {
+        ClipboardPanel.ApplyHistory(_clipboardHistory.Snapshot(), _clipboardHistory.Capacity);
+    }
+
+    private void StartClipboardMonitor()
+    {
+        if (_clipboardMonitor is not null || _windowHandle == nint.Zero)
+        {
+            return;
+        }
+
+        _clipboardMonitor = new ClipboardMonitor();
+        _clipboardMonitor.TextChanged += ClipboardMonitor_TextChanged;
+        _clipboardMonitor.Start(_windowHandle);
+    }
+
+    private void ClipboardMonitor_TextChanged(object? sender, string text)
+    {
+        if (!_clipboardHistory.AddText(text, DateTimeOffset.Now))
+        {
+            return;
+        }
+
+        if (_activeToolPanel == ToolPanelKind.Clipboard)
+        {
+            UpdateClipboardPanelState();
+        }
     }
 
     private void SetPetFrame(string framePath)
@@ -1578,6 +1626,7 @@ public partial class MainWindow : System.Windows.Window
         SpeechBubble.Height = BaseSpeechBubbleHeight * scale;
         SpeechBubble.ApplyScale(scale);
         ReminderPanel.ApplyScale(scale);
+        ClipboardPanel.ApplyScale(scale);
         Opacity = _settings.Appearance.Opacity;
         ClampWindowToWorkArea();
     }

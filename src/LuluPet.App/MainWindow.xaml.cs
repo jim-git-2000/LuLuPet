@@ -52,6 +52,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly Forms.ToolStripMenuItem _showMenuItem;
     private readonly Forms.ToolStripMenuItem _hideMenuItem;
     private readonly Forms.ToolStripMenuItem _settingsMenuItem;
+    private readonly Forms.ToolStripMenuItem _tutorialMenuItem;
     private readonly Forms.ToolStripMenuItem _clickThroughMenuItem;
     private readonly Forms.ToolStripMenuItem _autoStartMenuItem;
     private DateTimeOffset _lastAnimationTick;
@@ -63,7 +64,6 @@ public partial class MainWindow : System.Windows.Window
     private ClipboardMonitor? _clipboardMonitor;
     private nint _windowHandle;
     private PetState _initialPetState = PetState.Idle;
-    private SettingsWindow? _settingsWindow;
     private System.Windows.Point _dragStartScreenPoint;
     private double _dragStartLeft;
     private double _dragStartTop;
@@ -118,7 +118,8 @@ public partial class MainWindow : System.Windows.Window
         ApplyWindowIcon();
         _showMenuItem = new Forms.ToolStripMenuItem("显示", null, (_, _) => ShowPetWindow());
         _hideMenuItem = new Forms.ToolStripMenuItem("隐藏", null, (_, _) => HidePetWindow());
-        _settingsMenuItem = new Forms.ToolStripMenuItem("设置", null, (_, _) => ShowSettingsWindow());
+        _settingsMenuItem = new Forms.ToolStripMenuItem("设置", null, (_, _) => ShowTrayToolPanel(ToolPanelKind.Settings));
+        _tutorialMenuItem = new Forms.ToolStripMenuItem("教程", null, (_, _) => ShowTrayToolPanel(ToolPanelKind.Tutorial));
         _clickThroughMenuItem = new Forms.ToolStripMenuItem("点击穿透", null, (_, _) => ToggleClickThrough())
         {
             CheckOnClick = false
@@ -139,6 +140,8 @@ public partial class MainWindow : System.Windows.Window
         InitializeReminderPanel();
         InitializeClipboardPanel();
         InitializeFileTransitPanel();
+        InitializeSettingsPanel();
+        InitializeTutorialPanel();
         InitializeWin32();
         UpdateTrayMenuState();
     }
@@ -320,6 +323,7 @@ public partial class MainWindow : System.Windows.Window
         contextMenu.Items.Add(_showMenuItem);
         contextMenu.Items.Add(_hideMenuItem);
         contextMenu.Items.Add(_settingsMenuItem);
+        contextMenu.Items.Add(_tutorialMenuItem);
         contextMenu.Items.Add(new Forms.ToolStripSeparator());
         contextMenu.Items.Add(_clickThroughMenuItem);
         contextMenu.Items.Add(_autoStartMenuItem);
@@ -481,14 +485,12 @@ public partial class MainWindow : System.Windows.Window
         _hideMenuItem.Enabled = IsVisible;
         _clickThroughMenuItem.Checked = _settings.Interaction.ClickThrough;
         _autoStartMenuItem.Checked = _settings.Startup.AutoStart;
-        _settingsWindow?.ApplySettings(_settings);
+        SettingsPanel.ApplySettings(_settings);
         UpdateCompanionTrayText();
     }
 
     private void DisposeTrayIcon()
     {
-        _settingsWindow?.Close();
-        _settingsWindow = null;
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
     }
@@ -618,6 +620,37 @@ public partial class MainWindow : System.Windows.Window
         FileTransitPanel.FileOpenRequested += (_, path) => OpenFileTransitFile(path);
         FileTransitPanel.FileCopyRequested += (_, path) => CopyFileTransitFile(path);
         UpdateFileTransitPanelState();
+    }
+
+    private void InitializeSettingsPanel()
+    {
+        SettingsPanel.CloseRequested += (_, _) => HideActiveToolPanel();
+        SettingsPanel.ScaleChanged += value =>
+        {
+            _settings.Appearance.Scale = value;
+            ApplyVisualSettings();
+            SaveSettings();
+        };
+        SettingsPanel.OpacityChanged += value =>
+        {
+            _settings.Appearance.Opacity = value;
+            ApplyVisualSettings();
+            SaveSettings();
+        };
+        SettingsPanel.VolumeChanged += value =>
+        {
+            _settings.Audio.Volume = value;
+            SaveSettings();
+        };
+        SettingsPanel.ClickThroughChanged += SetClickThrough;
+        SettingsPanel.AutoStartChanged += SetAutoStart;
+        SettingsPanel.FileTransitFolderChanged += SetFileTransitFolder;
+        SettingsPanel.ApplySettings(_settings);
+    }
+
+    private void InitializeTutorialPanel()
+    {
+        TutorialPanel.CloseRequested += (_, _) => HideActiveToolPanel();
     }
 
     private void InitializeCompanionTime()
@@ -1344,6 +1377,8 @@ public partial class MainWindow : System.Windows.Window
         ReminderPanel.Visibility = Visibility.Collapsed;
         ClipboardPanel.Visibility = Visibility.Collapsed;
         FileTransitPanel.Visibility = Visibility.Collapsed;
+        SettingsPanel.Visibility = Visibility.Collapsed;
+        TutorialPanel.Visibility = Visibility.Collapsed;
     }
 
     private void PrepareToolPanel(ToolPanelKind panel)
@@ -1357,6 +1392,10 @@ public partial class MainWindow : System.Windows.Window
             else if (panel == ToolPanelKind.FileTransit)
             {
                 UpdateFileTransitPanelState();
+            }
+            else if (panel == ToolPanelKind.Settings)
+            {
+                SettingsPanel.ApplySettings(_settings);
             }
 
             return;
@@ -1374,6 +1413,8 @@ public partial class MainWindow : System.Windows.Window
             ToolPanelKind.Reminder => ReminderPanel,
             ToolPanelKind.Clipboard => ClipboardPanel,
             ToolPanelKind.FileTransit => FileTransitPanel,
+            ToolPanelKind.Settings => SettingsPanel,
+            ToolPanelKind.Tutorial => TutorialPanel,
             _ => throw new ArgumentOutOfRangeException(nameof(panel), panel, null)
         };
     }
@@ -1383,12 +1424,6 @@ public partial class MainWindow : System.Windows.Window
         var element = GetToolPanelElement(panel);
         element.Focus();
         Keyboard.Focus(element);
-    }
-
-    private void ToolPanelCloseButton_Click(object sender, RoutedEventArgs e)
-    {
-        HideActiveToolPanel();
-        e.Handled = true;
     }
 
     private void UpdateReminderPanelState()
@@ -1692,40 +1727,15 @@ public partial class MainWindow : System.Windows.Window
         SetAutoStart(!_settings.Startup.AutoStart);
     }
 
-    private void ShowSettingsWindow()
+    private void ShowTrayToolPanel(ToolPanelKind panel)
     {
-        if (_settingsWindow is not null)
+        if (_settings.Interaction.ClickThrough)
         {
-            _settingsWindow.Activate();
-            return;
+            SetClickThrough(false);
         }
 
-        _settingsWindow = new SettingsWindow(_settings)
-        {
-            Owner = this
-        };
-        _settingsWindow.ScaleChanged += value =>
-        {
-            _settings.Appearance.Scale = value;
-            ApplyVisualSettings();
-            SaveSettings();
-        };
-        _settingsWindow.OpacityChanged += value =>
-        {
-            _settings.Appearance.Opacity = value;
-            ApplyVisualSettings();
-            SaveSettings();
-        };
-        _settingsWindow.VolumeChanged += value =>
-        {
-            _settings.Audio.Volume = value;
-            SaveSettings();
-        };
-        _settingsWindow.ClickThroughChanged += SetClickThrough;
-        _settingsWindow.AutoStartChanged += SetAutoStart;
-        _settingsWindow.FileTransitFolderChanged += SetFileTransitFolder;
-        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
-        _settingsWindow.Show();
+        ShowPetWindow();
+        ShowToolPanel(panel);
     }
 
     private void SetClickThrough(bool enabled)
@@ -1782,6 +1792,8 @@ public partial class MainWindow : System.Windows.Window
         ReminderPanel.ApplyScale(scale);
         ClipboardPanel.ApplyScale(scale);
         FileTransitPanel.ApplyScale(scale);
+        SettingsPanel.ApplyScale(scale);
+        TutorialPanel.ApplyScale(scale);
         Opacity = _settings.Appearance.Opacity;
         ClampWindowToWorkArea();
     }
@@ -1920,7 +1932,9 @@ public partial class MainWindow : System.Windows.Window
     {
         return IsFromNamedElement(originalSource, "ReminderPanel")
             || IsFromNamedElement(originalSource, "ClipboardPanel")
-            || IsFromNamedElement(originalSource, "FileTransitPanel");
+            || IsFromNamedElement(originalSource, "FileTransitPanel")
+            || IsFromNamedElement(originalSource, "SettingsPanel")
+            || IsFromNamedElement(originalSource, "TutorialPanel");
     }
 
     private static bool IsFromNamedElement(object originalSource, string elementName)
@@ -1957,5 +1971,7 @@ internal enum ToolPanelKind
     None,
     Reminder,
     Clipboard,
-    FileTransit
+    FileTransit,
+    Settings,
+    Tutorial
 }

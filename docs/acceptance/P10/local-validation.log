@@ -1,0 +1,23 @@
+# P10 Local Validation
+
+Date: 2026-06-24
+
+## Static Checks
+
+- `git diff --check`: passed
+- `.github/workflows/build-windows.yml` YAML parse with Python/PyYAML: passed
+- workflow structural check for restore/test/publish/artifact/release steps: passed
+
+## Tests
+
+- `dotnet test tests/LuluPet.Core.Tests/LuluPet.Core.Tests.csproj --configuration Release --no-restore -m:1 /nr:false`: passed
+
+## Expected Local Limitation
+
+Full solution test/publish on this Ubuntu environment is blocked by the missing WPF WindowsDesktop SDK:
+
+```text
+error MSB4019: The imported project ".../Microsoft.NET.Sdk.WindowsDesktop.targets" was not found.
+```
+
+P10 release validation is therefore gated by the Windows GitHub Actions workflow.

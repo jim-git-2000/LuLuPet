@@ -53,14 +53,14 @@ public sealed class WpfDesktopBoundsProvider : IDesktopBoundsProvider
             bottomRight.Y);
     }
 
-    private Point ToDevicePoint(double x, double y)
+    private System.Windows.Point ToDevicePoint(double x, double y)
     {
-        return GetTransformToDevice().Transform(new Point(x, y));
+        return GetTransformToDevice().Transform(new System.Windows.Point(x, y));
     }
 
-    private Point FromDevicePoint(double x, double y)
+    private System.Windows.Point FromDevicePoint(double x, double y)
     {
-        return GetTransformFromDevice().Transform(new Point(x, y));
+        return GetTransformFromDevice().Transform(new System.Windows.Point(x, y));
     }
 
     private Matrix GetTransformToDevice()

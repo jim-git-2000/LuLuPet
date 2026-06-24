@@ -199,7 +199,7 @@ public partial class MainWindow : System.Windows.Window
         StartDragAnimation();
         Left = _dragStartLeft + deltaX;
         Top = _dragStartTop + deltaY;
-        ClampWindowToWorkArea();
+        ClampWindowToWorkArea(Left, Top);
         e.Handled = true;
     }
 
@@ -817,9 +817,9 @@ public partial class MainWindow : System.Windows.Window
 
         var width = ActualWidth > 0 ? ActualWidth : Width;
         var height = ActualHeight > 0 ? ActualHeight : Height;
-        var movementBounds = GetWindowMovementBounds(width, height);
         var nextLeft = Left + _walkVelocityX * elapsed.TotalSeconds;
         var nextTop = Top + _walkVelocityY * elapsed.TotalSeconds;
+        var movementBounds = GetWindowMovementBounds(nextLeft, nextTop, width, height);
         var reachedBoundary = false;
 
         if (nextLeft <= movementBounds.Left)
@@ -854,7 +854,7 @@ public partial class MainWindow : System.Windows.Window
         }
         else
         {
-            ClampWindowToWorkArea();
+            ClampWindowToWorkArea(Left, Top);
         }
     }
 
@@ -1010,12 +1010,26 @@ public partial class MainWindow : System.Windows.Window
     {
         var width = ActualWidth > 0 ? ActualWidth : Width;
         var height = ActualHeight > 0 ? ActualHeight : Height;
-        return GetWindowMovementBounds(width, height);
+        return GetWindowMovementBounds(Left, Top, width, height);
     }
 
     private MovementBounds GetWindowMovementBounds(double width, double height)
     {
-        return _desktopBoundsProvider.GetVirtualBounds().GetMovementBounds(width, height);
+        return GetWindowMovementBounds(Left, Top, width, height);
+    }
+
+    private MovementBounds GetWindowMovementBounds(
+        double candidateLeft,
+        double candidateTop,
+        double width,
+        double height)
+    {
+        return DesktopBounds.GetNearestMovementBounds(
+            _desktopBoundsProvider.GetScreenBounds(),
+            candidateLeft,
+            candidateTop,
+            width,
+            height);
     }
 
     private MovementBounds GetCurrentScreenMovementBounds()
@@ -1557,6 +1571,11 @@ public partial class MainWindow : System.Windows.Window
 
     private void ClampWindowToWorkArea()
     {
+        ClampWindowToWorkArea(Left, Top);
+    }
+
+    private void ClampWindowToWorkArea(double candidateLeft, double candidateTop)
+    {
         if (_isClampingWindow)
         {
             return;
@@ -1569,9 +1588,9 @@ public partial class MainWindow : System.Windows.Window
 
         var width = ActualWidth > 0 ? ActualWidth : Width;
         var height = ActualHeight > 0 ? ActualHeight : Height;
-        var movementBounds = GetWindowMovementBounds(width, height);
-        var clampedLeft = movementBounds.ClampLeft(Left);
-        var clampedTop = movementBounds.ClampTop(Top);
+        var movementBounds = GetWindowMovementBounds(candidateLeft, candidateTop, width, height);
+        var clampedLeft = movementBounds.ClampLeft(candidateLeft);
+        var clampedTop = movementBounds.ClampTop(candidateTop);
 
         if (Math.Abs(clampedLeft - Left) < 0.1 && Math.Abs(clampedTop - Top) < 0.1)
         {

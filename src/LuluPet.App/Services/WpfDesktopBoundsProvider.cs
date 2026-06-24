@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
@@ -16,13 +17,28 @@ public sealed class WpfDesktopBoundsProvider : IDesktopBoundsProvider
         _window = window;
     }
 
-    public DesktopBounds GetVirtualBounds()
+    public IReadOnlyList<DesktopBounds> GetScreenBounds()
     {
         var bounds = Forms.Screen.AllScreens
             .Select(screen => ToDesktopBounds(screen.Bounds))
+            .Where(static bounds => !bounds.IsEmpty)
             .ToArray();
 
-        var virtualBounds = DesktopBounds.Union(bounds);
+        if (bounds.Length > 0)
+        {
+            return bounds;
+        }
+
+        var fallback = SystemParameters.WorkArea;
+        return new[]
+        {
+            DesktopBounds.FromEdges(fallback.Left, fallback.Top, fallback.Right, fallback.Bottom)
+        };
+    }
+
+    public DesktopBounds GetVirtualBounds()
+    {
+        var virtualBounds = DesktopBounds.Union(GetScreenBounds());
         if (!virtualBounds.IsEmpty)
         {
             return virtualBounds;

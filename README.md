@@ -139,7 +139,8 @@ PetStateMachine
 窗口行为：
 
 - 拖拽允许跨多屏移动。
-- Walk 允许跨屏移动，到达所有屏幕联合边界后回到 Idle。
+- 拖拽和 Walk 严格按每个物理屏幕的真实边界约束；多屏上下错位时不会进入虚拟桌面的空白区域。
+- Walk 允许跨屏移动，到达当前所在物理屏幕边界后回到 Idle。
 - 提醒触发后的绕屏只绕噜噜当前所在的屏幕，不绕整个虚拟桌面。
 - 副屏位于主屏左侧或上方时，负坐标位置可以保存和恢复。
 
@@ -148,7 +149,7 @@ PetStateMachine
 推荐从 GitHub Actions 或 Release 下载 Windows x64 构建：
 
 - Actions artifact：`LuluPet-win-x64-ci-<run-number>`
-- Release asset：`LuluPet-win-x64-v版本号.zip`，例如 `LuluPet-win-x64-v1.0.2.zip`
+- Release asset：`LuluPet-win-x64-v版本号.zip`，例如 `LuluPet-win-x64-v1.0.3.zip`
 
 下载 zip 后先解压，再双击解压目录里的 `LuluPet.exe` 运行。不要只单独复制 exe；运行目录需要同时保留 `Assets/`、`settings.json` 等资源文件。首次启动后会显示透明桌面宠物，同时右下角托盘区域会出现 LuluPet 图标。
 
@@ -175,11 +176,11 @@ Ubuntu 本机如果缺少 `Microsoft.NET.Sdk.WindowsDesktop`，完整 WPF 构建
 
 GitHub Release 页面还会自动提供该 tag 对应的 Source code zip/tar.gz。
 
-发布 `v1.0.2`：
+发布 `v1.0.3`：
 
 ```bash
-git tag v1.0.2
-git push origin v1.0.2
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
 回滚策略：

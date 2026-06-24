@@ -22,7 +22,7 @@
 | 托盘 | 已完成 `NotifyIcon`、显示/隐藏/设置/穿透/自启/退出 | 增加今日陪伴时长 Tooltip 和番茄钟状态可选菜单 |
 | 设置 | 已完成 `settings.json`、`AppSettings`、`JsonSettingsStore` | 增加 `reminders` 配置节并做默认值补全 |
 | SQLite | 已完成 pet profile/status/interaction log | 增加今日陪伴统计表，提醒事件写入 interaction log |
-| Walk 边界 | 当前基于 `SystemParameters.WorkArea` | 改为多屏联合边界 |
+| Walk 边界 | 当前基于 `SystemParameters.WorkArea` | 改为多屏物理边界集合 |
 
 ## 功能目标
 
@@ -140,7 +140,7 @@
 
 ### 6. 多屏拖拽和 Walk
 
-当前代码使用 `SystemParameters.WorkArea`，更接近主屏工作区。PLAN2 要改为多屏联合边界。
+当前代码使用 `SystemParameters.WorkArea`，更接近主屏工作区。PLAN2 要改为多屏物理边界集合，而不是把所有屏幕合并成一个外接大矩形。
 
 目标行为：
 
@@ -150,7 +150,7 @@
 | 副屏在左侧 | 允许保存和恢复负 `Left` 坐标 |
 | 副屏在上方 | 允许保存和恢复负 `Top` 坐标 |
 | Walk | 可以从一个屏幕 walk 到另一个屏幕 |
-| 边界 | 到达所有屏幕联合边界后才停止 walk 并回到 Idle |
+| 边界 | 严格按每个物理屏幕真实边界约束，错位多屏不能进入虚拟空白区域 |
 | 防丢失 | 窗口不能完全离开所有屏幕 |
 
 ## 推荐实现架构
@@ -196,7 +196,7 @@ Core 层只处理可测试逻辑：
 | `ReminderScheduler` | 推进番茄钟、喝水提醒、起立休息提醒 |
 | `ReminderSettings` | 保存提醒设置，供 `AppSettings` 引用 |
 | `CompanionTimeTracker` | 计算今日陪伴累计时间和跨日期切换 |
-| `DesktopBounds` | 描述多屏联合边界，不依赖 WPF 控件 |
+| `DesktopBounds` | 描述单个屏幕边界和多屏物理边界选择，不依赖 WPF 控件 |
 
 Core 层不能引用 WPF 类型。时间推进使用显式 `Tick(TimeSpan elapsed, DateTimeOffset now)`，避免在单元测试里依赖真实计时器。
 
@@ -210,7 +210,7 @@ App 层负责 UI 和计时器接线：
 | `ReminderBubblePanel` | 气泡式提醒交互框 |
 | `ToggleSwitch` | 滑动开关控件 |
 | `DispatcherTimer` | 每秒推进番茄钟，每分钟刷新托盘文本 |
-| `WpfDesktopBoundsProvider` | 从 `Forms.Screen.AllScreens` 获取多屏联合边界 |
+| `WpfDesktopBoundsProvider` | 从 `Forms.Screen.AllScreens` 获取每个物理屏幕边界 |
 
 提醒触发时，统一调用现有 `ShowSpeech` 和 `TryPlayAction`，不要新增系统通知依赖。
 
@@ -409,16 +409,15 @@ public enum ReminderKind
 System.Windows.Forms.Screen.AllScreens
 ```
 
-把所有屏幕的 `Bounds` 合并为一个虚拟矩形：
+把所有屏幕的 `Bounds` 转换为 WPF DIP 后保留为物理屏幕矩形集合：
 
 ```text
-left   = min(screen.Bounds.Left)
-top    = min(screen.Bounds.Top)
-right  = max(screen.Bounds.Right)
-bottom = max(screen.Bounds.Bottom)
+screen[0] = left/top/right/bottom
+screen[1] = left/top/right/bottom
+...
 ```
 
-不要继续用单一 `SystemParameters.WorkArea` 作为拖拽和 Walk 的唯一边界。
+不要继续用单一 `SystemParameters.WorkArea` 作为拖拽和 Walk 的唯一边界，也不要只用所有屏幕的外接矩形；上下错位的副屏会在外接矩形里产生真实屏幕外的空白区域。
 
 ### Clamp 规则
 
@@ -426,21 +425,23 @@ bottom = max(screen.Bounds.Bottom)
 
 | 项目 | 规则 |
 |---|---|
-| 最小 Left | `virtualBounds.Left` |
-| 最大 Left | `virtualBounds.Right - minVisibleWidth` |
-| 最小 Top | `virtualBounds.Top` |
-| 最大 Top | `virtualBounds.Bottom - minVisibleHeight` |
+| 候选屏幕 | 根据候选窗口位置选择可完整容纳、中心点所在、重叠面积最大或距离最近的物理屏幕 |
+| 最小 Left | `selectedScreen.Left` |
+| 最大 Left | `selectedScreen.Right - windowWidth` |
+| 最小 Top | `selectedScreen.Top` |
+| 最大 Top | `selectedScreen.Bottom - windowHeight` |
 
-其中 `minVisibleWidth` 和 `minVisibleHeight` 建议取窗口实际宽高的 25%，并设下限 48px。这样窗口可以稍微贴边，但不会完全丢出屏幕。
+这样窗口可以跨屏拖动，但最终位置必须完整落在某一个真实屏幕矩形内，不会进入多屏外接矩形的空白区域。
 
 ### Walk 规则
 
 Walk 中计算下一位置时：
 
-1. 使用虚拟桌面边界判断是否到达总体边界。
-2. 未到达总体边界时允许继续移动，即使跨过主屏和副屏之间的边界。
-3. 到达总体边界后设置到边界内，并 `ForceState(PetState.Idle)`。
-4. 如果用户改了显示器布局，下一次 `Clamp` 时把窗口拉回新的虚拟边界内。
+1. 先计算下一帧候选位置。
+2. 根据候选位置从所有物理屏幕矩形中选择目标屏幕。
+3. 把下一帧位置夹到该物理屏幕的移动边界内。
+4. 如果触碰该屏幕边界，则 `ForceState(PetState.Idle)`。
+5. 如果用户改了显示器布局，下一次 `Clamp` 时把窗口拉回最近的真实屏幕内。
 
 ## Phase 开发计划
 
@@ -565,8 +566,8 @@ dotnet test tests/LuluPet.Core.Tests/LuluPet.Core.Tests.csproj
 **任务清单**
 
 1. 新增 `DesktopBounds` 和多屏边界提供器。
-2. 把 `ClampWindowToWorkArea` 改为多屏虚拟边界 Clamp。
-3. 把 `MoveWhileWalking` 的边界计算改为虚拟桌面边界。
+2. 把 `ClampWindowToWorkArea` 改为多屏物理边界 Clamp。
+3. 把 `MoveWhileWalking` 的边界计算改为基于候选位置的物理屏幕边界。
 4. 保存窗口位置时不拒绝负坐标。
 5. 显示器布局变化后能够把窗口拉回可见区域。
 
@@ -575,7 +576,7 @@ dotnet test tests/LuluPet.Core.Tests/LuluPet.Core.Tests.csproj
 - 双屏环境可把噜噜从主屏拖到副屏。
 - 副屏位于主屏左侧时，窗口位置可保存为负 `Left` 并重启恢复。
 - Walk 能跨屏移动。
-- 到达所有屏幕联合边界后才停止 Walk。
+- 多屏错位时，拖拽和 Walk 不会进入真实屏幕外的虚拟空白区域。
 - 单屏环境行为不退化。
 
 ### Phase P16｜文档、验收记录与发布

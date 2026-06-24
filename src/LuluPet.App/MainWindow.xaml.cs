@@ -13,9 +13,11 @@ using LuluPet.Core.Animation;
 using LuluPet.Core.Behavior;
 using LuluPet.Core.Companion;
 using LuluPet.Core.Config;
+using LuluPet.Core.Desktop;
 using LuluPet.Core.Dialogues;
 using LuluPet.Core.Reminders;
 using LuluPet.Core.Storage;
+using LuluPet.App.Services;
 using LuluPet.Win32;
 using Forms = System.Windows.Forms;
 
@@ -36,6 +38,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly DispatcherTimer _reminderTimer = new();
     private readonly DispatcherTimer _companionTimer = new();
     private readonly ReminderScheduler _reminderScheduler;
+    private readonly IDesktopBoundsProvider _desktopBoundsProvider = new WpfDesktopBoundsProvider();
     private readonly Dictionary<string, BitmapImage> _frameCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly Forms.ToolStripMenuItem _showMenuItem;
@@ -811,36 +814,32 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        var workArea = SystemParameters.WorkArea;
         var width = ActualWidth > 0 ? ActualWidth : Width;
         var height = ActualHeight > 0 ? ActualHeight : Height;
+        var movementBounds = GetWindowMovementBounds(width, height);
         var nextLeft = Left + _walkVelocityX * elapsed.TotalSeconds;
         var nextTop = Top + _walkVelocityY * elapsed.TotalSeconds;
-        var minLeft = workArea.Left;
-        var minTop = workArea.Top;
-        var maxLeft = Math.Max(workArea.Left, workArea.Right - width);
-        var maxTop = Math.Max(workArea.Top, workArea.Bottom - height);
         var reachedBoundary = false;
 
-        if (nextLeft <= minLeft)
+        if (nextLeft <= movementBounds.Left)
         {
-            nextLeft = minLeft;
+            nextLeft = movementBounds.Left;
             reachedBoundary = true;
         }
-        else if (nextLeft >= maxLeft)
+        else if (nextLeft >= movementBounds.Right)
         {
-            nextLeft = maxLeft;
+            nextLeft = movementBounds.Right;
             reachedBoundary = true;
         }
 
-        if (nextTop <= minTop)
+        if (nextTop <= movementBounds.Top)
         {
-            nextTop = minTop;
+            nextTop = movementBounds.Top;
             reachedBoundary = true;
         }
-        else if (nextTop >= maxTop)
+        else if (nextTop >= movementBounds.Bottom)
         {
-            nextTop = maxTop;
+            nextTop = movementBounds.Bottom;
             reachedBoundary = true;
         }
 
@@ -949,7 +948,7 @@ public partial class MainWindow : System.Windows.Window
 
     private bool TryBuildScreenLapTargets(out IReadOnlyList<System.Windows.Point> targets)
     {
-        var bounds = GetWindowMovementBounds();
+        var bounds = GetCurrentScreenMovementBounds();
         var left = bounds.Left;
         var top = bounds.Top;
         var right = bounds.Right;
@@ -1006,20 +1005,33 @@ public partial class MainWindow : System.Windows.Window
         return lapTargets.Count > 0;
     }
 
-    private (double Left, double Top, double Right, double Bottom) GetWindowMovementBounds()
+    private MovementBounds GetWindowMovementBounds()
     {
-        var workArea = SystemParameters.WorkArea;
         var width = ActualWidth > 0 ? ActualWidth : Width;
         var height = ActualHeight > 0 ? ActualHeight : Height;
-        var right = Math.Max(workArea.Left, workArea.Right - width);
-        var bottom = Math.Max(workArea.Top, workArea.Bottom - height);
-        return (workArea.Left, workArea.Top, right, bottom);
+        return GetWindowMovementBounds(width, height);
+    }
+
+    private MovementBounds GetWindowMovementBounds(double width, double height)
+    {
+        return _desktopBoundsProvider.GetVirtualBounds().GetMovementBounds(width, height);
+    }
+
+    private MovementBounds GetCurrentScreenMovementBounds()
+    {
+        var width = ActualWidth > 0 ? ActualWidth : Width;
+        var height = ActualHeight > 0 ? ActualHeight : Height;
+        var centerX = Left + width / 2;
+        var centerY = Top + height / 2;
+        return _desktopBoundsProvider
+            .GetBoundsForPoint(centerX, centerY)
+            .GetMovementBounds(width, height);
     }
 
     private static ScreenEdge GetNearestEdge(
         double x,
         double y,
-        (double Left, double Top, double Right, double Bottom) bounds)
+        MovementBounds bounds)
     {
         var nearestEdge = ScreenEdge.Left;
         var nearestDistance = Math.Abs(x - bounds.Left);
@@ -1551,13 +1563,9 @@ public partial class MainWindow : System.Windows.Window
 
         var width = ActualWidth > 0 ? ActualWidth : Width;
         var height = ActualHeight > 0 ? ActualHeight : Height;
-        var workArea = SystemParameters.WorkArea;
-        var minLeft = workArea.Left;
-        var minTop = workArea.Top;
-        var maxLeft = Math.Max(workArea.Left, workArea.Right - width);
-        var maxTop = Math.Max(workArea.Top, workArea.Bottom - height);
-        var clampedLeft = Math.Clamp(Left, minLeft, maxLeft);
-        var clampedTop = Math.Clamp(Top, minTop, maxTop);
+        var movementBounds = GetWindowMovementBounds(width, height);
+        var clampedLeft = movementBounds.ClampLeft(Left);
+        var clampedTop = movementBounds.ClampTop(Top);
 
         if (Math.Abs(clampedLeft - Left) < 0.1 && Math.Abs(clampedTop - Top) < 0.1)
         {

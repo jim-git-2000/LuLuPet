@@ -13,19 +13,30 @@
         Topmost="True"
         WindowStartupLocation="Manual"
         Focusable="True">
-    <Grid Background="Transparent">
+    <Grid x:Name="RootLayout"
+          Background="Transparent">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="PetColumn"
+                              Width="340" />
+            <ColumnDefinition x:Name="ReminderColumn"
+                              Width="0" />
+        </Grid.ColumnDefinitions>
+
         <controls:SpeechBubble x:Name="SpeechBubble"
+                               Grid.Column="0"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Top"
                                Margin="0,8,0,0"
                                Visibility="Collapsed" />
         <controls:ReminderBubblePanel x:Name="ReminderPanel"
+                                      Grid.Column="1"
                                       Panel.ZIndex="20"
-                                      HorizontalAlignment="Center"
+                                      HorizontalAlignment="Left"
                                       VerticalAlignment="Top"
-                                      Margin="0,8,0,0"
+                                      Margin="8,18,16,0"
                                       Visibility="Collapsed" />
         <Image x:Name="PetImage"
+               Grid.Column="0"
                Width="300"
                Height="300"
                Stretch="Uniform"
@@ -40,6 +51,7 @@
             </Image.RenderTransform>
         </Image>
         <Border x:Name="MissingAssetFallback"
+                Grid.Column="0"
                 Width="220"
                 Height="88"
                 Background="#CCFFFFFF"

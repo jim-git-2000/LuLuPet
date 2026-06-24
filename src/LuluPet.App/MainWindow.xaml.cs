@@ -66,6 +66,12 @@ public partial class MainWindow : System.Windows.Window
     private const double WalkPixelsPerSecond = 36;
     private const double MinWalkPixelsPerSecond = 22;
     private const double MaxWalkPixelsPerSecond = 64;
+    private const double BaseWindowWidth = 340;
+    private const double BaseWindowHeight = 390;
+    private const double BasePetImageSize = 300;
+    private const double BaseSpeechBubbleWidth = 230;
+    private const double BaseSpeechBubbleHeight = 96;
+    private const double ReminderPanelColumnWidth = 324;
     private const double DragThreshold = 4;
     private static readonly TimeSpan InteractionAnimationDuration = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan BubbleVisibleDuration = TimeSpan.FromSeconds(4);
@@ -1165,20 +1171,23 @@ public partial class MainWindow : System.Windows.Window
     private void ApplyVisualSettings()
     {
         var scale = _settings.Appearance.Scale;
-        var windowWidth = 340 * scale;
-        var windowHeight = 390 * scale;
+        var petColumnWidth = BaseWindowWidth * scale;
+        var reminderColumnWidth = _isReminderPanelOpen ? ReminderPanelColumnWidth : 0;
+        var windowWidth = petColumnWidth + reminderColumnWidth;
+        var windowHeight = BaseWindowHeight * scale;
         if (_isReminderPanelOpen)
         {
-            windowWidth = Math.Max(windowWidth, 320);
             windowHeight = Math.Max(windowHeight, 390);
         }
 
         Width = windowWidth;
         Height = windowHeight;
-        PetImage.Width = 300 * scale;
-        PetImage.Height = 300 * scale;
-        SpeechBubble.Width = 230 * scale;
-        SpeechBubble.Height = 96 * scale;
+        PetColumn.Width = new GridLength(petColumnWidth);
+        ReminderColumn.Width = new GridLength(reminderColumnWidth);
+        PetImage.Width = BasePetImageSize * scale;
+        PetImage.Height = BasePetImageSize * scale;
+        SpeechBubble.Width = BaseSpeechBubbleWidth * scale;
+        SpeechBubble.Height = BaseSpeechBubbleHeight * scale;
         SpeechBubble.ApplyScale(scale);
         ReminderPanel.ApplyScale(scale);
         Opacity = _settings.Appearance.Opacity;

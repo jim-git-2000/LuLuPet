@@ -40,7 +40,7 @@ public partial class ToggleSwitch : System.Windows.Controls.UserControl
         e.Handled = true;
     }
 
-    private void ToggleSwitch_KeyDown(object sender, KeyEventArgs e)
+    private void ToggleSwitch_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key != Key.Space && e.Key != Key.Enter)
         {

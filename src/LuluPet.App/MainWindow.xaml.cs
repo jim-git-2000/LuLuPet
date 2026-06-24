@@ -53,10 +53,14 @@ public partial class MainWindow : System.Windows.Window
     private double _dragStartTop;
     private double _walkVelocityX = WalkPixelsPerSecond;
     private double _walkVelocityY;
+    private readonly List<System.Windows.Point> _screenLapTargets = new();
+    private int _screenLapTargetIndex;
+    private string? _screenLapSpeechText;
     private bool _isClampingWindow;
     private bool _isPotentialDrag;
     private bool _isDraggingWindow;
     private bool _isDragAnimationActive;
+    private bool _isScreenLapActive;
     private bool _dragStartedOnPet;
     private bool _isWalkSpeechVisible;
     private bool _isExitRequested;
@@ -66,6 +70,8 @@ public partial class MainWindow : System.Windows.Window
     private const double WalkPixelsPerSecond = 36;
     private const double MinWalkPixelsPerSecond = 22;
     private const double MaxWalkPixelsPerSecond = 64;
+    private const double ScreenLapPixelsPerSecond = 120;
+    private const double ScreenLapTargetTolerance = 4;
     private const double BaseWindowWidth = 340;
     private const double BaseWindowHeight = 390;
     private const double BasePetImageSize = 300;
@@ -619,7 +625,11 @@ public partial class MainWindow : System.Windows.Window
 
         _stateMachine.Tick(elapsed);
 
-        if (_stateMachine.CurrentState == PetState.Walk)
+        if (_isScreenLapActive)
+        {
+            MoveAlongScreenLap(elapsed);
+        }
+        else if (_stateMachine.CurrentState == PetState.Walk)
         {
             MoveWhileWalking(elapsed);
         }
@@ -647,9 +657,19 @@ public partial class MainWindow : System.Windows.Window
 
     private void HandleReminderEvent(ReminderEvent reminderEvent)
     {
-        ShowSpeech(reminderEvent.Message);
-        PlayReminderAnimation(reminderEvent.PreferredAction);
         RecordInteraction(reminderEvent.InteractionType, reminderEvent.Message);
+
+        if (ShouldWalkScreenLap(reminderEvent.Kind))
+        {
+            ShowSpeech(reminderEvent.Message, autoHide: false);
+            BeginScreenLap(reminderEvent.Message);
+        }
+        else
+        {
+            ShowSpeech(reminderEvent.Message);
+            PlayReminderAnimation(reminderEvent.PreferredAction);
+        }
+
         UpdateReminderPanelState();
     }
 
@@ -687,7 +707,7 @@ public partial class MainWindow : System.Windows.Window
 
     private void PlayStateAnimation(PetState state)
     {
-        if (_isDragAnimationActive || IsInteractionAnimationActive())
+        if (_isDragAnimationActive || _isScreenLapActive || IsInteractionAnimationActive())
         {
             return;
         }
@@ -755,6 +775,218 @@ public partial class MainWindow : System.Windows.Window
         {
             ClampWindowToWorkArea();
         }
+    }
+
+    private void BeginScreenLap(string speechText)
+    {
+        if (!TryBuildScreenLapTargets(out var targets))
+        {
+            ShowSpeech(speechText);
+            PlayReminderAnimation("Happy");
+            return;
+        }
+
+        _isPotentialDrag = false;
+        _isDraggingWindow = false;
+        _isDragAnimationActive = false;
+        _dragStartedOnPet = false;
+        ReleaseMouseCapture();
+
+        _screenLapTargets.Clear();
+        _screenLapTargets.AddRange(targets);
+        _screenLapTargetIndex = 0;
+        _screenLapSpeechText = speechText;
+        _isScreenLapActive = true;
+        _interactionAnimationUntil = null;
+        _stateMachine.ForceState(PetState.Idle);
+        ShowSpeech(speechText, autoHide: false);
+
+        if (!TryPlayAction(PetState.Walk.ToString()))
+        {
+            TryPlayAction(PetState.Idle.ToString());
+        }
+
+        UpdatePetFacing(_screenLapTargets[0].X - Left);
+    }
+
+    private void MoveAlongScreenLap(TimeSpan elapsed)
+    {
+        if (elapsed <= TimeSpan.Zero || _screenLapTargetIndex >= _screenLapTargets.Count)
+        {
+            return;
+        }
+
+        var target = _screenLapTargets[_screenLapTargetIndex];
+        if (!string.IsNullOrWhiteSpace(_screenLapSpeechText))
+        {
+            ShowSpeech(_screenLapSpeechText, autoHide: false);
+        }
+
+        var deltaX = target.X - Left;
+        var deltaY = target.Y - Top;
+        var distance = Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+        var step = ScreenLapPixelsPerSecond * elapsed.TotalSeconds;
+
+        if (distance <= Math.Max(step, ScreenLapTargetTolerance))
+        {
+            Left = target.X;
+            Top = target.Y;
+            _screenLapTargetIndex++;
+
+            if (_screenLapTargetIndex >= _screenLapTargets.Count)
+            {
+                EndScreenLap();
+                return;
+            }
+
+            var nextTarget = _screenLapTargets[_screenLapTargetIndex];
+            UpdatePetFacing(nextTarget.X - Left);
+            return;
+        }
+
+        var ratio = step / distance;
+        Left += deltaX * ratio;
+        Top += deltaY * ratio;
+        UpdatePetFacing(deltaX);
+    }
+
+    private void EndScreenLap()
+    {
+        var speechText = _screenLapSpeechText;
+        _screenLapTargets.Clear();
+        _screenLapTargetIndex = 0;
+        _screenLapSpeechText = null;
+        _isScreenLapActive = false;
+        _stateMachine.ForceState(PetState.Idle);
+        PlayStateAnimation(_stateMachine.CurrentState);
+
+        if (!string.IsNullOrWhiteSpace(speechText))
+        {
+            ShowSpeech(speechText);
+        }
+    }
+
+    private bool TryBuildScreenLapTargets(out IReadOnlyList<System.Windows.Point> targets)
+    {
+        var bounds = GetWindowMovementBounds();
+        var left = bounds.Left;
+        var top = bounds.Top;
+        var right = bounds.Right;
+        var bottom = bounds.Bottom;
+
+        if (right <= left || bottom <= top)
+        {
+            targets = Array.Empty<System.Windows.Point>();
+            return false;
+        }
+
+        var currentX = Math.Clamp(Left, left, right);
+        var currentY = Math.Clamp(Top, top, bottom);
+        var nearestEdge = GetNearestEdge(currentX, currentY, bounds);
+        var lapTargets = new List<System.Windows.Point>(capacity: 6);
+
+        switch (nearestEdge)
+        {
+            case ScreenEdge.Left:
+                AddScreenLapTarget(lapTargets, left, currentY);
+                AddScreenLapTarget(lapTargets, left, top);
+                AddScreenLapTarget(lapTargets, right, top);
+                AddScreenLapTarget(lapTargets, right, bottom);
+                AddScreenLapTarget(lapTargets, left, bottom);
+                AddScreenLapTarget(lapTargets, left, currentY);
+                break;
+            case ScreenEdge.Top:
+                AddScreenLapTarget(lapTargets, currentX, top);
+                AddScreenLapTarget(lapTargets, right, top);
+                AddScreenLapTarget(lapTargets, right, bottom);
+                AddScreenLapTarget(lapTargets, left, bottom);
+                AddScreenLapTarget(lapTargets, left, top);
+                AddScreenLapTarget(lapTargets, currentX, top);
+                break;
+            case ScreenEdge.Right:
+                AddScreenLapTarget(lapTargets, right, currentY);
+                AddScreenLapTarget(lapTargets, right, bottom);
+                AddScreenLapTarget(lapTargets, left, bottom);
+                AddScreenLapTarget(lapTargets, left, top);
+                AddScreenLapTarget(lapTargets, right, top);
+                AddScreenLapTarget(lapTargets, right, currentY);
+                break;
+            case ScreenEdge.Bottom:
+                AddScreenLapTarget(lapTargets, currentX, bottom);
+                AddScreenLapTarget(lapTargets, left, bottom);
+                AddScreenLapTarget(lapTargets, left, top);
+                AddScreenLapTarget(lapTargets, right, top);
+                AddScreenLapTarget(lapTargets, right, bottom);
+                AddScreenLapTarget(lapTargets, currentX, bottom);
+                break;
+        }
+
+        targets = lapTargets;
+        return lapTargets.Count > 0;
+    }
+
+    private (double Left, double Top, double Right, double Bottom) GetWindowMovementBounds()
+    {
+        var workArea = SystemParameters.WorkArea;
+        var width = ActualWidth > 0 ? ActualWidth : Width;
+        var height = ActualHeight > 0 ? ActualHeight : Height;
+        var right = Math.Max(workArea.Left, workArea.Right - width);
+        var bottom = Math.Max(workArea.Top, workArea.Bottom - height);
+        return (workArea.Left, workArea.Top, right, bottom);
+    }
+
+    private static ScreenEdge GetNearestEdge(
+        double x,
+        double y,
+        (double Left, double Top, double Right, double Bottom) bounds)
+    {
+        var nearestEdge = ScreenEdge.Left;
+        var nearestDistance = Math.Abs(x - bounds.Left);
+
+        var topDistance = Math.Abs(y - bounds.Top);
+        if (topDistance < nearestDistance)
+        {
+            nearestEdge = ScreenEdge.Top;
+            nearestDistance = topDistance;
+        }
+
+        var rightDistance = Math.Abs(bounds.Right - x);
+        if (rightDistance < nearestDistance)
+        {
+            nearestEdge = ScreenEdge.Right;
+            nearestDistance = rightDistance;
+        }
+
+        var bottomDistance = Math.Abs(bounds.Bottom - y);
+        if (bottomDistance < nearestDistance)
+        {
+            nearestEdge = ScreenEdge.Bottom;
+        }
+
+        return nearestEdge;
+    }
+
+    private static void AddScreenLapTarget(List<System.Windows.Point> targets, double x, double y)
+    {
+        var point = new System.Windows.Point(x, y);
+        if (targets.Count > 0)
+        {
+            var previous = targets[^1];
+            if (Math.Abs(previous.X - point.X) < 0.1 && Math.Abs(previous.Y - point.Y) < 0.1)
+            {
+                return;
+            }
+        }
+
+        targets.Add(point);
+    }
+
+    private static bool ShouldWalkScreenLap(ReminderKind reminderKind)
+    {
+        return reminderKind is ReminderKind.PomodoroFocusDone
+            or ReminderKind.PomodoroRestDone
+            or ReminderKind.Water
+            or ReminderKind.Stand;
     }
 
     private void BeginWalkMotion()
@@ -1318,5 +1550,13 @@ public partial class MainWindow : System.Windows.Window
         }
 
         return false;
+    }
+
+    private enum ScreenEdge
+    {
+        Left,
+        Top,
+        Right,
+        Bottom
     }
 }

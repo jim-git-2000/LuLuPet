@@ -57,6 +57,26 @@ public partial class ReminderBubblePanel : System.Windows.Controls.UserControl
         UpdateStatusText();
     }
 
+    public void ApplyRuntimeState(
+        PomodoroPhase pomodoroPhase,
+        TimeSpan pomodoroRemaining,
+        TimeSpan waterRemaining,
+        TimeSpan standRemaining)
+    {
+        PomodoroStatusText.Text = pomodoroPhase switch
+        {
+            PomodoroPhase.Focus => $"状态：专注中 {FormatClock(pomodoroRemaining)}",
+            PomodoroPhase.Rest => $"状态：休息中 {FormatClock(pomodoroRemaining)}",
+            _ => "状态：未开启"
+        };
+        WaterStatusText.Text = WaterToggle.IsChecked
+            ? $"下次 {FormatMinutes(waterRemaining)}"
+            : "未开启";
+        StandStatusText.Text = StandToggle.IsChecked
+            ? $"下次 {FormatMinutes(standRemaining)}"
+            : "未开启";
+    }
+
     public void ApplyScale(double scale)
     {
         Width = 300;
@@ -141,5 +161,26 @@ public partial class ReminderBubblePanel : System.Windows.Controls.UserControl
         PomodoroStatusText.Text = PomodoroToggle.IsChecked ? "状态：专注待开始" : "状态：未开启";
         WaterStatusText.Text = WaterToggle.IsChecked ? "已开启" : "未开启";
         StandStatusText.Text = StandToggle.IsChecked ? "已开启" : "未开启";
+    }
+
+    private static string FormatClock(TimeSpan remaining)
+    {
+        if (remaining <= TimeSpan.Zero)
+        {
+            return "00:00";
+        }
+
+        return $"{(int)remaining.TotalMinutes:00}:{remaining.Seconds:00}";
+    }
+
+    private static string FormatMinutes(TimeSpan remaining)
+    {
+        if (remaining <= TimeSpan.Zero)
+        {
+            return "即将提醒";
+        }
+
+        var minutes = (int)Math.Ceiling(remaining.TotalMinutes);
+        return $"{minutes} 分钟";
     }
 }

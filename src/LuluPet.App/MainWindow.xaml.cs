@@ -32,6 +32,8 @@ public partial class MainWindow : System.Windows.Window
     private readonly DispatcherTimer _stateTimer = new();
     private readonly DispatcherTimer _periodicSpeechTimer = new();
     private readonly DispatcherTimer _bubbleHideTimer = new();
+    private readonly DispatcherTimer _reminderTimer = new();
+    private readonly ReminderScheduler _reminderScheduler;
     private readonly Dictionary<string, BitmapImage> _frameCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly Forms.ToolStripMenuItem _showMenuItem;
@@ -41,6 +43,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly Forms.ToolStripMenuItem _autoStartMenuItem;
     private DateTimeOffset _lastAnimationTick;
     private DateTimeOffset _lastStateTick;
+    private DateTimeOffset _lastReminderTick;
     private DateTimeOffset? _interactionAnimationUntil;
     private nint _windowHandle;
     private PetState _initialPetState = PetState.Idle;
@@ -79,6 +82,7 @@ public partial class MainWindow : System.Windows.Window
         _dialogueLineProvider = new DialogueLineProvider(
             Path.Combine(AppContext.BaseDirectory, "Assets", "dialogues", "lines.json"));
         _petRepository = new SqlitePetRepository(LuluPetDataPaths.GetDefaultDatabasePath());
+        _reminderScheduler = new ReminderScheduler(_settings.Reminders);
 
         InitializeComponent();
         ApplyWindowIcon();
@@ -255,6 +259,7 @@ public partial class MainWindow : System.Windows.Window
         _stateTimer.Stop();
         _periodicSpeechTimer.Stop();
         _bubbleHideTimer.Stop();
+        _reminderTimer.Stop();
         SaveWindowPosition();
         DisposeTrayIcon();
         base.OnClosing(e);
@@ -504,7 +509,12 @@ public partial class MainWindow : System.Windows.Window
         ReminderPanel.PomodoroEnabledChanged += (_, value) =>
         {
             _settings.Reminders.PomodoroEnabled = value;
-            SaveReminderSettings();
+            var reminderEvent = _reminderScheduler.SetPomodoroEnabled(value);
+            SaveReminderSettings(applyToScheduler: false);
+            if (reminderEvent is not null)
+            {
+                HandleReminderEvent(reminderEvent);
+            }
         };
         ReminderPanel.PomodoroMinutesChanged += (_, value) =>
         {
@@ -536,6 +546,12 @@ public partial class MainWindow : System.Windows.Window
             _settings.Reminders.StandReminderMinutes = value;
             SaveReminderSettings();
         };
+
+        _reminderTimer.Interval = TimeSpan.FromSeconds(1);
+        _reminderTimer.Tick += (_, _) => TickReminders();
+        _lastReminderTick = DateTimeOffset.UtcNow;
+        _reminderTimer.Start();
+        UpdateReminderPanelState();
     }
 
     private void InitializeWin32()
@@ -607,6 +623,42 @@ public partial class MainWindow : System.Windows.Window
             _interactionAnimationUntil = null;
             PlayStateAnimation(_stateMachine.CurrentState);
         }
+    }
+
+    private void TickReminders()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var elapsed = now - _lastReminderTick;
+        _lastReminderTick = now;
+
+        foreach (var reminderEvent in _reminderScheduler.Tick(elapsed))
+        {
+            HandleReminderEvent(reminderEvent);
+        }
+
+        UpdateReminderPanelState();
+    }
+
+    private void HandleReminderEvent(ReminderEvent reminderEvent)
+    {
+        ShowSpeech(reminderEvent.Message);
+        PlayReminderAnimation(reminderEvent.PreferredAction);
+        RecordInteraction(reminderEvent.InteractionType, reminderEvent.Message);
+        UpdateReminderPanelState();
+    }
+
+    private void PlayReminderAnimation(string preferredAction)
+    {
+        _interactionAnimationUntil = DateTimeOffset.UtcNow + InteractionAnimationDuration;
+
+        if (TryPlayAction(preferredAction)
+            || TryPlayAction("Happy")
+            || TryPlayAction("Idle"))
+        {
+            return;
+        }
+
+        PlayStateAnimation(_stateMachine.CurrentState);
     }
 
     private void OnPetStateChanged(PetStateChangedEventArgs args)
@@ -866,6 +918,7 @@ public partial class MainWindow : System.Windows.Window
     {
         ReminderSettings.Normalize(_settings.Reminders);
         ReminderPanel.ApplySettings(_settings.Reminders);
+        UpdateReminderPanelState();
         HideSpeechBubble();
         ReminderPanel.Visibility = Visibility.Visible;
         _isReminderPanelOpen = true;
@@ -906,6 +959,15 @@ public partial class MainWindow : System.Windows.Window
     {
         ReminderPanel.Focus();
         Keyboard.Focus(ReminderPanel);
+    }
+
+    private void UpdateReminderPanelState()
+    {
+        ReminderPanel.ApplyRuntimeState(
+            _reminderScheduler.PomodoroPhase,
+            _reminderScheduler.PomodoroRemaining,
+            _reminderScheduler.WaterRemaining,
+            _reminderScheduler.StandRemaining);
     }
 
     private void SetPetFrame(string framePath)
@@ -1206,11 +1268,17 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    private void SaveReminderSettings()
+    private void SaveReminderSettings(bool applyToScheduler = true)
     {
         ReminderSettings.Normalize(_settings.Reminders);
+        if (applyToScheduler)
+        {
+            _reminderScheduler.ApplySettings(_settings.Reminders);
+        }
+
         ReminderPanel.ApplySettings(_settings.Reminders);
         SaveSettings();
+        UpdateReminderPanelState();
     }
 
     private static bool IsFromPetImage(object originalSource)

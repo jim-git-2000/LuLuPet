@@ -71,6 +71,39 @@ public sealed class SqlitePetRepositoryTests
         Assert.Equal(222, interaction.WindowTop);
     }
 
+    [Fact]
+    public void CompanionDayStats_CanBeAddedAndLoaded()
+    {
+        var databasePath = CreateDatabasePath();
+        var repository = new SqlitePetRepository(databasePath);
+        repository.Initialize();
+        var localDate = new DateOnly(2026, 6, 24);
+
+        repository.AddCompanionSeconds(localDate, 120, DateTimeOffset.Parse("2026-06-24T01:00:00Z"));
+        repository.AddCompanionSeconds(localDate, 30, DateTimeOffset.Parse("2026-06-24T01:01:00Z"));
+
+        var stats = repository.LoadCompanionDayStats(localDate);
+
+        Assert.Equal(localDate, stats.LocalDate);
+        Assert.Equal(150, stats.TotalSeconds);
+    }
+
+    [Fact]
+    public void CompanionDayStats_SeparatesDifferentDates()
+    {
+        var databasePath = CreateDatabasePath();
+        var repository = new SqlitePetRepository(databasePath);
+        repository.Initialize();
+        var firstDate = new DateOnly(2026, 6, 24);
+        var secondDate = new DateOnly(2026, 6, 25);
+
+        repository.AddCompanionSeconds(firstDate, 90, DateTimeOffset.Parse("2026-06-24T01:00:00Z"));
+        repository.AddCompanionSeconds(secondDate, 45, DateTimeOffset.Parse("2026-06-25T01:00:00Z"));
+
+        Assert.Equal(90, repository.LoadCompanionDayStats(firstDate).TotalSeconds);
+        Assert.Equal(45, repository.LoadCompanionDayStats(secondDate).TotalSeconds);
+    }
+
     private static string CreateDatabasePath()
     {
         return Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "lulupet.db");

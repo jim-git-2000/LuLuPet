@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using LuluPet.Core;
 using LuluPet.Core.Animation;
 using LuluPet.Core.Behavior;
+using LuluPet.Core.Companion;
 using LuluPet.Core.Config;
 using LuluPet.Core.Dialogues;
 using LuluPet.Core.Reminders;
@@ -33,6 +34,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly DispatcherTimer _periodicSpeechTimer = new();
     private readonly DispatcherTimer _bubbleHideTimer = new();
     private readonly DispatcherTimer _reminderTimer = new();
+    private readonly DispatcherTimer _companionTimer = new();
     private readonly ReminderScheduler _reminderScheduler;
     private readonly Dictionary<string, BitmapImage> _frameCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Forms.NotifyIcon _notifyIcon;
@@ -44,7 +46,9 @@ public partial class MainWindow : System.Windows.Window
     private DateTimeOffset _lastAnimationTick;
     private DateTimeOffset _lastStateTick;
     private DateTimeOffset _lastReminderTick;
+    private DateTimeOffset _lastCompanionTick;
     private DateTimeOffset? _interactionAnimationUntil;
+    private CompanionTimeTracker? _companionTracker;
     private nint _windowHandle;
     private PetState _initialPetState = PetState.Idle;
     private SettingsWindow? _settingsWindow;
@@ -112,6 +116,7 @@ public partial class MainWindow : System.Windows.Window
         _notifyIcon = CreateNotifyIcon();
 
         InitializeStorage();
+        InitializeCompanionTime();
         RestoreWindowPosition();
         ApplyVisualSettings();
         InitializeAnimation();
@@ -272,6 +277,8 @@ public partial class MainWindow : System.Windows.Window
         _periodicSpeechTimer.Stop();
         _bubbleHideTimer.Stop();
         _reminderTimer.Stop();
+        _companionTimer.Stop();
+        SaveCompanionElapsed();
         SaveWindowPosition();
         DisposeTrayIcon();
         base.OnClosing(e);
@@ -446,6 +453,7 @@ public partial class MainWindow : System.Windows.Window
         _clickThroughMenuItem.Checked = _settings.Interaction.ClickThrough;
         _autoStartMenuItem.Checked = _settings.Startup.AutoStart;
         _settingsWindow?.ApplySettings(_settings);
+        UpdateCompanionTrayText();
     }
 
     private void DisposeTrayIcon()
@@ -566,6 +574,29 @@ public partial class MainWindow : System.Windows.Window
         UpdateReminderPanelState();
     }
 
+    private void InitializeCompanionTime()
+    {
+        var localDate = GetCurrentLocalDate();
+        var totalSeconds = 0L;
+
+        try
+        {
+            totalSeconds = _petRepository.LoadCompanionDayStats(localDate).TotalSeconds;
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"Failed to load companion time stats: {exception.Message}");
+        }
+
+        _companionTracker = new CompanionTimeTracker(localDate, totalSeconds);
+        _lastCompanionTick = DateTimeOffset.UtcNow;
+        UpdateCompanionTrayText();
+
+        _companionTimer.Interval = TimeSpan.FromMinutes(1);
+        _companionTimer.Tick += (_, _) => TickCompanionTime();
+        _companionTimer.Start();
+    }
+
     private void InitializeWin32()
     {
         SourceInitialized += (_, _) =>
@@ -653,6 +684,56 @@ public partial class MainWindow : System.Windows.Window
         }
 
         UpdateReminderPanelState();
+    }
+
+    private void TickCompanionTime()
+    {
+        SaveCompanionElapsed();
+        UpdateCompanionTrayText();
+    }
+
+    private void SaveCompanionElapsed()
+    {
+        if (_companionTracker is null)
+        {
+            return;
+        }
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        var elapsed = nowUtc - _lastCompanionTick;
+        _lastCompanionTick = nowUtc;
+        var localDate = GetCurrentLocalDate();
+
+        if (localDate != _companionTracker.LocalDate)
+        {
+            var existingTotalSeconds = 0L;
+
+            try
+            {
+                existingTotalSeconds = _petRepository.LoadCompanionDayStats(localDate).TotalSeconds;
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"Failed to load new companion day stats: {exception.Message}");
+            }
+
+            _companionTracker.Reset(localDate, existingTotalSeconds);
+        }
+
+        var addedSeconds = _companionTracker.Tick(elapsed, localDate);
+        if (addedSeconds <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _petRepository.AddCompanionSeconds(localDate, addedSeconds, nowUtc);
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"Failed to save companion time stats: {exception.Message}");
+        }
     }
 
     private void HandleReminderEvent(ReminderEvent reminderEvent)
@@ -1520,6 +1601,29 @@ public partial class MainWindow : System.Windows.Window
         ReminderPanel.ApplySettings(_settings.Reminders);
         SaveSettings();
         UpdateReminderPanelState();
+    }
+
+    private void UpdateCompanionTrayText()
+    {
+        if (_companionTracker is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _notifyIcon.Text = _companionTracker.FormatTrayText();
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or InvalidOperationException)
+        {
+            Debug.WriteLine($"Failed to update tray text: {exception.Message}");
+        }
+    }
+
+    private static DateOnly GetCurrentLocalDate()
+    {
+        return DateOnly.FromDateTime(DateTimeOffset.Now.LocalDateTime);
     }
 
     private static bool IsFromPetImage(object originalSource)

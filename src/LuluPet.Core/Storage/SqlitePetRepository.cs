@@ -1,4 +1,5 @@
 using System.Globalization;
+using LuluPet.Core.Companion;
 using Microsoft.Data.Sqlite;
 
 namespace LuluPet.Core.Storage;
@@ -195,6 +196,68 @@ public sealed class SqlitePetRepository
         return interactions;
     }
 
+    public CompanionDayStats LoadCompanionDayStats(DateOnly localDate)
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT total_seconds, updated_at_utc
+            FROM companion_day_stats
+            WHERE local_date = $local_date;
+            """;
+        command.Parameters.AddWithValue("$local_date", FormatDateOnly(localDate));
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            return new CompanionDayStats(localDate, 0, DateTimeOffset.UtcNow);
+        }
+
+        return new CompanionDayStats(
+            localDate,
+            Math.Max(0, reader.GetInt64(0)),
+            ParseDateTimeOffset(reader.GetString(1)));
+    }
+
+    public void SaveCompanionDayStats(CompanionDayStats stats)
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO companion_day_stats (local_date, total_seconds, updated_at_utc)
+            VALUES ($local_date, $total_seconds, $updated_at_utc)
+            ON CONFLICT(local_date) DO UPDATE SET
+                total_seconds = excluded.total_seconds,
+                updated_at_utc = excluded.updated_at_utc;
+            """;
+        command.Parameters.AddWithValue("$local_date", FormatDateOnly(stats.LocalDate));
+        command.Parameters.AddWithValue("$total_seconds", Math.Max(0, stats.TotalSeconds));
+        command.Parameters.AddWithValue("$updated_at_utc", FormatDateTimeOffset(stats.UpdatedAtUtc));
+        command.ExecuteNonQuery();
+    }
+
+    public void AddCompanionSeconds(DateOnly localDate, long seconds, DateTimeOffset updatedAtUtc)
+    {
+        if (seconds <= 0)
+        {
+            return;
+        }
+
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO companion_day_stats (local_date, total_seconds, updated_at_utc)
+            VALUES ($local_date, $seconds, $updated_at_utc)
+            ON CONFLICT(local_date) DO UPDATE SET
+                total_seconds = companion_day_stats.total_seconds + excluded.total_seconds,
+                updated_at_utc = excluded.updated_at_utc;
+            """;
+        command.Parameters.AddWithValue("$local_date", FormatDateOnly(localDate));
+        command.Parameters.AddWithValue("$seconds", seconds);
+        command.Parameters.AddWithValue("$updated_at_utc", FormatDateTimeOffset(updatedAtUtc));
+        command.ExecuteNonQuery();
+    }
+
     private static string SchemaSql => """
         CREATE TABLE IF NOT EXISTS pet_profile (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -224,6 +287,12 @@ public sealed class SqlitePetRepository
 
         CREATE INDEX IF NOT EXISTS ix_interaction_log_created_at_utc
             ON interaction_log (created_at_utc);
+
+        CREATE TABLE IF NOT EXISTS companion_day_stats (
+            local_date TEXT PRIMARY KEY,
+            total_seconds INTEGER NOT NULL DEFAULT 0,
+            updated_at_utc TEXT NOT NULL
+        );
         """;
 
     private SqliteConnection OpenConnection()
@@ -281,6 +350,11 @@ public sealed class SqlitePetRepository
     private static string FormatDateTimeOffset(DateTimeOffset value)
     {
         return value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatDateOnly(DateOnly value)
+    {
+        return value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
     private static DateTimeOffset ParseDateTimeOffset(string value)

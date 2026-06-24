@@ -32,8 +32,8 @@
                                       Grid.Column="1"
                                       Panel.ZIndex="20"
                                       HorizontalAlignment="Left"
-                                      VerticalAlignment="Top"
-                                      Margin="8,18,16,0"
+                                      VerticalAlignment="Bottom"
+                                      Margin="8,0,16,10"
                                       Visibility="Collapsed" />
         <Image x:Name="PetImage"
                Grid.Column="0"

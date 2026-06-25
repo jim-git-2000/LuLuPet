@@ -1713,7 +1713,7 @@ public partial class MainWindow : System.Windows.Window
             return null;
         }
 
-        using var bitmap = new Bitmap(image.Width, image.Height, PixelFormat.Format32bppArgb);
+        using var bitmap = new Bitmap(image.Width, image.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         using (var graphics = Graphics.FromImage(bitmap))
         {
             graphics.Clear(System.Drawing.Color.Transparent);

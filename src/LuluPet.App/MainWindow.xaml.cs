@@ -618,6 +618,7 @@ public partial class MainWindow : System.Windows.Window
         FileTransitPanel.CloseRequested += (_, _) => HideActiveToolPanel();
         FileTransitPanel.OpenFolderRequested += (_, _) => OpenFileTransitFolder();
         FileTransitPanel.FilesDropped += (_, paths) => AddFilesToTransit(paths);
+        FileTransitPanel.PasteRequested += (_, _) => PasteClipboardToTransit();
         FileTransitPanel.FileOpenRequested += (_, path) => OpenFileTransitFile(path);
         FileTransitPanel.FileCopyRequested += (_, path) => CopyFileTransitFile(path);
         UpdateFileTransitPanelState();
@@ -1541,6 +1542,98 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
+    private void PasteClipboardToTransit()
+    {
+        try
+        {
+            var filePaths = GetClipboardFileDropList();
+            if (filePaths.Count > 0)
+            {
+                var copiedCount = _fileTransitService.AddFiles(filePaths);
+                UpdateFileTransitPanelState();
+                FileTransitPanel.SetStatus(copiedCount > 0
+                    ? $"已粘贴 {copiedCount} 个文件"
+                    : "未发现可粘贴的文件");
+                return;
+            }
+
+            var image = GetClipboardImage();
+            if (image is not null)
+            {
+                AddClipboardImageToTransit(image);
+                UpdateFileTransitPanelState();
+                FileTransitPanel.SetStatus("已粘贴剪切板图片");
+                return;
+            }
+
+            FileTransitPanel.SetStatus("剪切板没有可暂存内容");
+        }
+        catch (Exception exception) when (exception is IOException
+            or ArgumentException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or InvalidOperationException
+            or ExternalException
+            or System.Security.SecurityException)
+        {
+            Debug.WriteLine($"Failed to paste clipboard content to file transit: {exception.Message}");
+            FileTransitPanel.SetStatus("粘贴失败");
+        }
+    }
+
+    private void AddClipboardImageToTransit(BitmapSource image)
+    {
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(image));
+
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+
+        var fileName = $"clipboard-image-{DateTime.Now:yyyyMMdd-HHmmss}.png";
+        _fileTransitService.AddFileBytes(fileName, stream.ToArray());
+    }
+
+    private static IReadOnlyList<string> GetClipboardFileDropList()
+    {
+        try
+        {
+            return ReadClipboardWithRetry(ReadWpfClipboardFileDropList);
+        }
+        catch (Exception exception) when (exception is ExternalException or InvalidOperationException)
+        {
+            return ReadClipboardWithRetry(ReadFormsClipboardFileDropList);
+        }
+    }
+
+    private static IReadOnlyList<string> ReadWpfClipboardFileDropList()
+    {
+        return WpfClipboard.ContainsFileDropList()
+            ? NormalizeClipboardFileDropList(WpfClipboard.GetFileDropList())
+            : Array.Empty<string>();
+    }
+
+    private static IReadOnlyList<string> ReadFormsClipboardFileDropList()
+    {
+        return Forms.Clipboard.ContainsFileDropList()
+            ? NormalizeClipboardFileDropList(Forms.Clipboard.GetFileDropList())
+            : Array.Empty<string>();
+    }
+
+    private static IReadOnlyList<string> NormalizeClipboardFileDropList(StringCollection fileDropList)
+    {
+        return fileDropList
+            .Cast<string>()
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static BitmapSource? GetClipboardImage()
+    {
+        return ReadClipboardWithRetry(() =>
+            WpfClipboard.ContainsImage() ? WpfClipboard.GetImage() : null);
+    }
+
     private void CopyClipboardHistoryText(string text)
     {
         try
@@ -1601,6 +1694,27 @@ public partial class MainWindow : System.Windows.Window
                 System.Threading.Thread.Sleep(ClipboardWriteRetryDelayMilliseconds);
             }
         }
+    }
+
+    private static T ReadClipboardWithRetry<T>(Func<T> readClipboard)
+    {
+        for (var attempt = 1; attempt <= ClipboardWriteMaxAttempts; attempt++)
+        {
+            try
+            {
+                return readClipboard();
+            }
+            catch (ExternalException) when (attempt < ClipboardWriteMaxAttempts)
+            {
+                System.Threading.Thread.Sleep(ClipboardWriteRetryDelayMilliseconds);
+            }
+            catch (InvalidOperationException) when (attempt < ClipboardWriteMaxAttempts)
+            {
+                System.Threading.Thread.Sleep(ClipboardWriteRetryDelayMilliseconds);
+            }
+        }
+
+        return readClipboard();
     }
 
     private void StartClipboardMonitor()

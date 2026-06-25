@@ -7,6 +7,10 @@ using LuluPet.Core.FileTransit;
 using WpfDataFormats = System.Windows.DataFormats;
 using WpfDragDropEffects = System.Windows.DragDropEffects;
 using WpfDragEventArgs = System.Windows.DragEventArgs;
+using WpfKey = System.Windows.Input.Key;
+using WpfKeyboard = System.Windows.Input.Keyboard;
+using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
+using WpfModifierKeys = System.Windows.Input.ModifierKeys;
 using WpfMouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
 
 namespace LuluPet.App.Controls;
@@ -24,6 +28,8 @@ public partial class FileTransitBubblePanel : System.Windows.Controls.UserContro
     public event EventHandler? OpenFolderRequested;
 
     public event EventHandler<IReadOnlyList<string>>? FilesDropped;
+
+    public event EventHandler? PasteRequested;
 
     public event EventHandler<string>? FileOpenRequested;
 
@@ -64,6 +70,16 @@ public partial class FileTransitBubblePanel : System.Windows.Controls.UserContro
     private void OpenFolderButton_Click(object sender, RoutedEventArgs e)
     {
         OpenFolderRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void FileTransitPanel_PreviewKeyDown(object sender, WpfKeyEventArgs e)
+    {
+        if (e.Key == WpfKey.V
+            && (WpfKeyboard.Modifiers & WpfModifierKeys.Control) == WpfModifierKeys.Control)
+        {
+            PasteRequested?.Invoke(this, EventArgs.Empty);
+            e.Handled = true;
+        }
     }
 
     private void FileListBox_MouseDoubleClick(object sender, WpfMouseButtonEventArgs e)

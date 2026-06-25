@@ -90,7 +90,7 @@
                                FontWeight="SemiBold"
                                Foreground="#FF5A3A18"
                                Margin="0,0,0,8" />
-                    <TextBlock Text="打开 D 面板后，可以把文件拖进来暂存。拖入会复制文件，不会移动原文件。同名文件会自动追加序号。双击文件会打开；右键文件会复制该文件，可粘贴到其他位置。"
+                    <TextBlock Text="打开 D 面板后，可以把文件拖进来暂存，也可以按 Ctrl+V 粘贴当前复制的文件或剪切板图片。拖入和粘贴都会复制内容，不会移动原文件。同名文件会自动追加序号。双击文件会打开；右键文件会复制该文件，可粘贴到其他位置。"
                                TextWrapping="Wrap"
                                Foreground="#FF6B4B21"
                                Margin="0,0,0,14" />

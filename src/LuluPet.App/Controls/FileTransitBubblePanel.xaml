@@ -5,6 +5,7 @@
              Height="292"
              Focusable="True"
              AllowDrop="True"
+             PreviewKeyDown="FileTransitPanel_PreviewKeyDown"
              DragEnter="FileTransitPanel_DragEnter"
              DragOver="FileTransitPanel_DragOver"
              Drop="FileTransitPanel_Drop">

@@ -61,6 +61,23 @@ public sealed class FileTransitService
         return copiedCount;
     }
 
+    public string AddFileBytes(string sourceFileName, byte[] content)
+    {
+        if (content.Length == 0)
+        {
+            throw new ArgumentException("File content cannot be empty.", nameof(content));
+        }
+
+        EnsureFolderExists();
+
+        var destinationPath = FileTransitPathResolver.GetAvailableDestinationPath(
+            _folderPath,
+            sourceFileName,
+            File.Exists);
+        File.WriteAllBytes(destinationPath, content);
+        return destinationPath;
+    }
+
     public void OpenFolder()
     {
         EnsureFolderExists();

@@ -1323,13 +1323,21 @@ public partial class MainWindow : System.Windows.Window
         _stateMachine.ForceState(PetState.Idle);
         _interactionAnimationUntil = DateTimeOffset.UtcNow + InteractionAnimationDuration;
 
-        if (!TryPlayAction("Happy"))
-        {
-            TryPlayAction("Idle");
-        }
+        PlayRandomClickAnimation();
 
         var message = ShowRandomSpeech();
         RecordInteraction("click", message);
+    }
+
+    private void PlayRandomClickAnimation()
+    {
+        var primaryAction = Random.Shared.Next(2) == 0 ? "Happy" : "Surprised";
+        var fallbackAction = primaryAction == "Happy" ? "Surprised" : "Happy";
+
+        if (!TryPlayAction(primaryAction) && !TryPlayAction(fallbackAction))
+        {
+            TryPlayAction("Idle");
+        }
     }
 
     private void TriggerEat()

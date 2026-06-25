@@ -72,8 +72,11 @@ public partial class MainWindow : System.Windows.Window
     private double _walkVelocityY;
     private readonly List<System.Windows.Point> _screenLapTargets = new();
     private int _screenLapTargetIndex;
+    private int _visualSettingsLayoutVersion;
     private string? _screenLapSpeechText;
     private bool _isClampingWindow;
+    private bool _isApplyingVisualSettings;
+    private bool _isVisualSettingsLayoutPending;
     private bool _isPotentialDrag;
     private bool _isDraggingWindow;
     private bool _isDragAnimationActive;
@@ -96,6 +99,7 @@ public partial class MainWindow : System.Windows.Window
     private const double BaseSpeechBubbleHeight = 96;
     private const double ToolPanelColumnWidth = 324;
     private const double DragThreshold = 4;
+    private const double WindowPositionEpsilon = 0.1;
     private const int ClipboardWriteMaxAttempts = 6;
     private const int ClipboardWriteRetryDelayMilliseconds = 25;
     private static readonly TimeSpan InteractionAnimationDuration = TimeSpan.FromSeconds(2);
@@ -218,9 +222,13 @@ public partial class MainWindow : System.Windows.Window
         _isDraggingWindow = true;
         UpdatePetFacing(deltaX);
         StartDragAnimation();
-        Left = _dragStartLeft + deltaX;
-        Top = _dragStartTop + deltaY;
-        ClampWindowToWorkArea(Left, Top);
+
+        var candidateLeft = _dragStartLeft + deltaX;
+        var candidateTop = _dragStartTop + deltaY;
+        var movementBounds = GetWindowMovementBounds(candidateLeft, candidateTop, GetWindowWidth(), GetWindowHeight());
+        SetWindowPosition(
+            movementBounds.ClampLeft(candidateLeft),
+            movementBounds.ClampTop(candidateTop));
         e.Handled = true;
     }
 
@@ -691,8 +699,20 @@ public partial class MainWindow : System.Windows.Window
             ClampWindowToWorkArea();
         };
 
-        LocationChanged += (_, _) => ClampWindowToWorkArea();
-        SizeChanged += (_, _) => ClampWindowToWorkArea();
+        LocationChanged += (_, _) =>
+        {
+            if (!_isApplyingVisualSettings && !_isVisualSettingsLayoutPending)
+            {
+                ClampWindowToWorkArea();
+            }
+        };
+        SizeChanged += (_, _) =>
+        {
+            if (!_isApplyingVisualSettings && !_isVisualSettingsLayoutPending)
+            {
+                ClampWindowToWorkArea();
+            }
+        };
         Loaded += (_, _) =>
         {
             ClampWindowToWorkArea();
@@ -1144,9 +1164,7 @@ public partial class MainWindow : System.Windows.Window
 
     private MovementBounds GetWindowMovementBounds()
     {
-        var width = ActualWidth > 0 ? ActualWidth : Width;
-        var height = ActualHeight > 0 ? ActualHeight : Height;
-        return GetWindowMovementBounds(Left, Top, width, height);
+        return GetWindowMovementBounds(Left, Top, GetWindowWidth(), GetWindowHeight());
     }
 
     private MovementBounds GetWindowMovementBounds(double width, double height)
@@ -1170,13 +1188,23 @@ public partial class MainWindow : System.Windows.Window
 
     private MovementBounds GetCurrentScreenMovementBounds()
     {
-        var width = ActualWidth > 0 ? ActualWidth : Width;
-        var height = ActualHeight > 0 ? ActualHeight : Height;
+        var width = GetWindowWidth();
+        var height = GetWindowHeight();
         var centerX = Left + width / 2;
         var centerY = Top + height / 2;
         return _desktopBoundsProvider
             .GetBoundsForPoint(centerX, centerY)
             .GetMovementBounds(width, height);
+    }
+
+    private double GetWindowWidth()
+    {
+        return ActualWidth > 0 ? ActualWidth : Width;
+    }
+
+    private double GetWindowHeight()
+    {
+        return ActualHeight > 0 ? ActualHeight : Height;
     }
 
     private static ScreenEdge GetNearestEdge(
@@ -2070,6 +2098,7 @@ public partial class MainWindow : System.Windows.Window
     private void ApplyVisualSettings()
     {
         var scale = _settings.Appearance.Scale;
+        var layoutVersion = ++_visualSettingsLayoutVersion;
         var petColumnWidth = BaseWindowWidth * scale;
         var toolPanelColumnWidth = _activeToolPanel != ToolPanelKind.None ? ToolPanelColumnWidth : 0;
         var windowWidth = petColumnWidth + toolPanelColumnWidth;
@@ -2079,22 +2108,44 @@ public partial class MainWindow : System.Windows.Window
             windowHeight = Math.Max(windowHeight, 390);
         }
 
-        Width = windowWidth;
-        Height = windowHeight;
-        PetColumn.Width = new GridLength(petColumnWidth);
-        ToolPanelColumn.Width = new GridLength(toolPanelColumnWidth);
-        PetImage.Width = BasePetImageSize * scale;
-        PetImage.Height = BasePetImageSize * scale;
-        SpeechBubble.Width = BaseSpeechBubbleWidth * scale;
-        SpeechBubble.Height = BaseSpeechBubbleHeight * scale;
-        SpeechBubble.ApplyScale(scale);
-        ReminderPanel.ApplyScale(scale);
-        ClipboardPanel.ApplyScale(scale);
-        FileTransitPanel.ApplyScale(scale);
-        SettingsPanel.ApplyScale(scale);
-        TutorialPanel.ApplyScale(scale);
-        Opacity = _settings.Appearance.Opacity;
-        ClampWindowToWorkArea();
+        try
+        {
+            _isApplyingVisualSettings = true;
+            _isVisualSettingsLayoutPending = true;
+            Width = windowWidth;
+            Height = windowHeight;
+            PetColumn.Width = new GridLength(petColumnWidth);
+            ToolPanelColumn.Width = new GridLength(toolPanelColumnWidth);
+            PetImage.Width = BasePetImageSize * scale;
+            PetImage.Height = BasePetImageSize * scale;
+            SpeechBubble.Width = BaseSpeechBubbleWidth * scale;
+            SpeechBubble.Height = BaseSpeechBubbleHeight * scale;
+            SpeechBubble.ApplyScale(scale);
+            ReminderPanel.ApplyScale(scale);
+            ClipboardPanel.ApplyScale(scale);
+            FileTransitPanel.ApplyScale(scale);
+            SettingsPanel.ApplyScale(scale);
+            TutorialPanel.ApplyScale(scale);
+            Opacity = _settings.Appearance.Opacity;
+        }
+        finally
+        {
+            _isApplyingVisualSettings = false;
+        }
+
+        ClampWindowToWorkArea(Left, Top, windowWidth, windowHeight);
+        Dispatcher.BeginInvoke(
+            () =>
+            {
+                if (layoutVersion != _visualSettingsLayoutVersion)
+                {
+                    return;
+                }
+
+                _isVisualSettingsLayoutPending = false;
+                ClampWindowToWorkArea();
+            },
+            DispatcherPriority.Loaded);
     }
 
     private void ApplyWindowStyles()
@@ -2134,10 +2185,19 @@ public partial class MainWindow : System.Windows.Window
 
     private void ClampWindowToWorkArea()
     {
-        ClampWindowToWorkArea(Left, Top);
+        ClampWindowToWorkArea(Left, Top, GetWindowWidth(), GetWindowHeight());
     }
 
     private void ClampWindowToWorkArea(double candidateLeft, double candidateTop)
+    {
+        ClampWindowToWorkArea(candidateLeft, candidateTop, GetWindowWidth(), GetWindowHeight());
+    }
+
+    private void ClampWindowToWorkArea(
+        double candidateLeft,
+        double candidateTop,
+        double width,
+        double height)
     {
         if (_isClampingWindow)
         {
@@ -2149,13 +2209,12 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        var width = ActualWidth > 0 ? ActualWidth : Width;
-        var height = ActualHeight > 0 ? ActualHeight : Height;
         var movementBounds = GetWindowMovementBounds(candidateLeft, candidateTop, width, height);
         var clampedLeft = movementBounds.ClampLeft(candidateLeft);
         var clampedTop = movementBounds.ClampTop(candidateTop);
 
-        if (Math.Abs(clampedLeft - Left) < 0.1 && Math.Abs(clampedTop - Top) < 0.1)
+        if (Math.Abs(clampedLeft - Left) < WindowPositionEpsilon
+            && Math.Abs(clampedTop - Top) < WindowPositionEpsilon)
         {
             return;
         }
@@ -2163,12 +2222,24 @@ public partial class MainWindow : System.Windows.Window
         try
         {
             _isClampingWindow = true;
-            Left = clampedLeft;
-            Top = clampedTop;
+            SetWindowPosition(clampedLeft, clampedTop);
         }
         finally
         {
             _isClampingWindow = false;
+        }
+    }
+
+    private void SetWindowPosition(double left, double top)
+    {
+        if (Math.Abs(left - Left) >= WindowPositionEpsilon)
+        {
+            Left = left;
+        }
+
+        if (Math.Abs(top - Top) >= WindowPositionEpsilon)
+        {
+            Top = top;
         }
     }
 

@@ -36,7 +36,6 @@ public partial class MainWindow : System.Windows.Window
     private readonly SqlitePetRepository _petRepository;
     private readonly FrameAnimationPlayer _animationPlayer = new();
     private readonly PetStateMachine _stateMachine = new();
-    private readonly DispatcherTimer _animationTimer = new();
     private readonly DispatcherTimer _stateTimer = new();
     private readonly DispatcherTimer _periodicSpeechTimer = new();
     private readonly DispatcherTimer _bubbleHideTimer = new();
@@ -58,6 +57,7 @@ public partial class MainWindow : System.Windows.Window
     private DateTimeOffset _lastStateTick;
     private DateTimeOffset _lastReminderTick;
     private DateTimeOffset _lastCompanionTick;
+    private TimeSpan? _lastAnimationRenderingTime;
     private DateTimeOffset? _interactionAnimationUntil;
     private CompanionTimeTracker? _companionTracker;
     private ClipboardMonitor? _clipboardMonitor;
@@ -78,6 +78,7 @@ public partial class MainWindow : System.Windows.Window
     private bool _isScreenLapActive;
     private bool _dragStartedOnPet;
     private bool _isWalkSpeechVisible;
+    private bool _isAnimationRenderingSubscribed;
     private bool _isExitRequested;
     private ToolPanelKind _activeToolPanel = ToolPanelKind.None;
 
@@ -304,7 +305,7 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        _animationTimer.Stop();
+        StopAnimationRendering();
         _stateTimer.Stop();
         _periodicSpeechTimer.Stop();
         _bubbleHideTimer.Stop();
@@ -452,8 +453,7 @@ public partial class MainWindow : System.Windows.Window
 
         if (_animationPlayer.IsPlaying)
         {
-            _lastAnimationTick = DateTimeOffset.UtcNow;
-            _animationTimer.Start();
+            StartAnimationRendering();
         }
 
         _lastStateTick = DateTimeOffset.UtcNow;
@@ -465,7 +465,7 @@ public partial class MainWindow : System.Windows.Window
     private void HidePetWindow()
     {
         SaveWindowPosition();
-        _animationTimer.Stop();
+        StopAnimationRendering();
         _stateTimer.Stop();
         _periodicSpeechTimer.Stop();
         _bubbleHideTimer.Stop();
@@ -509,13 +509,11 @@ public partial class MainWindow : System.Windows.Window
         LoadAction("Angry", "angry", fps: 10);
         LoadAction("Surprised", "surprised", fps: 10);
 
-        _animationTimer.Interval = TimeSpan.FromMilliseconds(33);
-        _animationTimer.Tick += (_, _) => TickAnimation();
         _lastAnimationTick = DateTimeOffset.UtcNow;
 
         if (TryPlayAction("Idle") || TryPlayAction("Walk") || TryPlayAction("Sleep"))
         {
-            _animationTimer.Start();
+            StartAnimationRendering();
         }
         else
         {
@@ -705,10 +703,19 @@ public partial class MainWindow : System.Windows.Window
             "pet",
             directoryName);
 
-        if (!_animationPlayer.TryLoadActionFromDirectory(actionName, directoryPath, fps))
+        var frames = AnimationFrameLoader.LoadPngFrames(directoryPath);
+        if (frames.Count == 0)
         {
             Debug.WriteLine($"Animation action '{actionName}' has no frames in {directoryPath}.");
+            return;
         }
+
+        foreach (var framePath in frames)
+        {
+            _ = TryGetPetFrame(framePath, out _);
+        }
+
+        _animationPlayer.LoadAction(actionName, frames, fps);
     }
 
     private bool TryPlayAction(string actionName)
@@ -720,6 +727,51 @@ public partial class MainWindow : System.Windows.Window
 
         _animationPlayer.Play(actionName);
         return true;
+    }
+
+    private void StartAnimationRendering()
+    {
+        if (_isAnimationRenderingSubscribed)
+        {
+            return;
+        }
+
+        _lastAnimationTick = DateTimeOffset.UtcNow;
+        _lastAnimationRenderingTime = null;
+        CompositionTarget.Rendering += CompositionTarget_Rendering;
+        _isAnimationRenderingSubscribed = true;
+    }
+
+    private void StopAnimationRendering()
+    {
+        if (!_isAnimationRenderingSubscribed)
+        {
+            return;
+        }
+
+        CompositionTarget.Rendering -= CompositionTarget_Rendering;
+        _lastAnimationRenderingTime = null;
+        _isAnimationRenderingSubscribed = false;
+    }
+
+    private void CompositionTarget_Rendering(object? sender, EventArgs e)
+    {
+        if (e is RenderingEventArgs renderingArgs)
+        {
+            var renderingTime = renderingArgs.RenderingTime;
+            if (_lastAnimationRenderingTime is null)
+            {
+                _lastAnimationRenderingTime = renderingTime;
+                return;
+            }
+
+            var elapsed = renderingTime - _lastAnimationRenderingTime.Value;
+            _lastAnimationRenderingTime = renderingTime;
+            _animationPlayer.Tick(elapsed);
+            return;
+        }
+
+        TickAnimation();
     }
 
     private void TickAnimation()
@@ -1744,22 +1796,32 @@ public partial class MainWindow : System.Windows.Window
 
     private void SetPetFrame(string framePath)
     {
-        if (!File.Exists(framePath))
-        {
-            MissingAssetFallback.Visibility = Visibility.Visible;
-            return;
-        }
-
-        if (_frameCache.TryGetValue(framePath, out var cachedImage))
+        if (TryGetPetFrame(framePath, out var cachedImage))
         {
             PetImage.Source = cachedImage;
             MissingAssetFallback.Visibility = Visibility.Collapsed;
             return;
         }
 
+        MissingAssetFallback.Visibility = Visibility.Visible;
+    }
+
+    private bool TryGetPetFrame(string framePath, out BitmapImage image)
+    {
+        image = default!;
+        if (!File.Exists(framePath))
+        {
+            return false;
+        }
+
+        if (_frameCache.TryGetValue(framePath, out image))
+        {
+            return true;
+        }
+
         try
         {
-            var image = new BitmapImage();
+            image = new BitmapImage();
             image.BeginInit();
             image.CacheOption = BitmapCacheOption.OnLoad;
             image.UriSource = new Uri(framePath, UriKind.Absolute);
@@ -1767,8 +1829,7 @@ public partial class MainWindow : System.Windows.Window
             image.Freeze();
 
             _frameCache[framePath] = image;
-            PetImage.Source = image;
-            MissingAssetFallback.Visibility = Visibility.Collapsed;
+            return true;
         }
         catch (Exception exception) when (exception is IOException
             or ArgumentException
@@ -1776,7 +1837,8 @@ public partial class MainWindow : System.Windows.Window
             or InvalidOperationException)
         {
             Debug.WriteLine($"Failed to load pet frame '{framePath}': {exception.Message}");
-            MissingAssetFallback.Visibility = Visibility.Visible;
+            image = default!;
+            return false;
         }
     }
 

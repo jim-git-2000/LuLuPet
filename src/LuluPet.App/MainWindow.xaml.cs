@@ -1891,8 +1891,9 @@ public partial class MainWindow : System.Windows.Window
             return false;
         }
 
-        if (_frameCache.TryGetValue(framePath, out image))
+        if (_frameCache.TryGetValue(framePath, out var cachedImage))
         {
+            image = cachedImage;
             return true;
         }
 

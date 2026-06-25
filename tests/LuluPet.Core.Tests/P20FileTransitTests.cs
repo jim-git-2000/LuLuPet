@@ -12,9 +12,11 @@ public sealed class P20FileTransitTests
         var dataDirectory = LuluPetDataPaths.GetDefaultDataDirectory();
         var databasePath = LuluPetDataPaths.GetDefaultDatabasePath();
         var transitFolderPath = LuluPetDataPaths.GetDefaultFileTransitFolderPath();
+        var clipboardHistoryPath = LuluPetDataPaths.GetDefaultClipboardHistoryPath();
 
         Assert.Equal(Path.Combine(dataDirectory, "lulupet.db"), databasePath);
         Assert.Equal(Path.Combine(dataDirectory, "Transit"), transitFolderPath);
+        Assert.Equal(Path.Combine(dataDirectory, "clipboard-history.json"), clipboardHistoryPath);
     }
 
     [Fact]

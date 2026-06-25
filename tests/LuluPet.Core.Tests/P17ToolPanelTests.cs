@@ -155,4 +155,63 @@ public sealed class P17ToolPanelTests
 
         Assert.Empty(history.Snapshot());
     }
+
+    [Fact]
+    public void ClipboardHistory_ReplaceWithRestoresLatestItemsWithinCapacity()
+    {
+        var history = new ClipboardHistory(capacity: 3);
+        var capturedAt = DateTimeOffset.Parse("2026-06-25T00:00:00Z");
+
+        history.ReplaceWith(
+        [
+            new ClipboardHistoryItem("alpha", capturedAt),
+            new ClipboardHistoryItem("beta", capturedAt.AddSeconds(1)),
+            new ClipboardHistoryItem("alpha", capturedAt.AddSeconds(2)),
+            new ClipboardHistoryItem("gamma", capturedAt.AddSeconds(3)),
+            new ClipboardHistoryItem("delta", capturedAt.AddSeconds(4))
+        ]);
+
+        var snapshot = history.Snapshot();
+
+        Assert.Equal(3, snapshot.Count);
+        Assert.Equal("alpha", snapshot[0].Text);
+        Assert.Equal("beta", snapshot[1].Text);
+        Assert.Equal("gamma", snapshot[2].Text);
+    }
+
+    [Fact]
+    public void ClipboardHistoryStore_SavesAndLoadsItems()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var path = Path.Combine(directory, "clipboard-history.json");
+        var store = new ClipboardHistoryStore(path);
+        var capturedAt = DateTimeOffset.Parse("2026-06-25T00:00:00Z");
+
+        store.Save(
+        [
+            new ClipboardHistoryItem("alpha", capturedAt),
+            new ClipboardHistoryItem("beta", capturedAt.AddSeconds(1))
+        ]);
+
+        var loaded = store.Load();
+
+        Assert.Equal(2, loaded.Count);
+        Assert.Equal("alpha", loaded[0].Text);
+        Assert.Equal(capturedAt, loaded[0].CapturedAt);
+        Assert.Equal("beta", loaded[1].Text);
+    }
+
+    [Fact]
+    public void ClipboardHistoryStore_LoadReturnsEmpty_WhenJsonIsInvalid()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "clipboard-history.json");
+        File.WriteAllText(path, "not json");
+        var store = new ClipboardHistoryStore(path);
+
+        var loaded = store.Load();
+
+        Assert.Empty(loaded);
+    }
 }

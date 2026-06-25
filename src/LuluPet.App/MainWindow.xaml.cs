@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -42,6 +43,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly DispatcherTimer _reminderTimer = new();
     private readonly DispatcherTimer _companionTimer = new();
     private readonly ClipboardHistory _clipboardHistory;
+    private readonly ClipboardHistoryStore _clipboardHistoryStore;
     private readonly FileTransitService _fileTransitService;
     private readonly ReminderScheduler _reminderScheduler;
     private readonly IDesktopBoundsProvider _desktopBoundsProvider;
@@ -112,6 +114,8 @@ public partial class MainWindow : System.Windows.Window
             Path.Combine(AppContext.BaseDirectory, "Assets", "dialogues", "lines.json"));
         _petRepository = new SqlitePetRepository(LuluPetDataPaths.GetDefaultDatabasePath());
         _clipboardHistory = new ClipboardHistory(_settings.ToolPanels.ClipboardHistoryLimit);
+        _clipboardHistoryStore = new ClipboardHistoryStore(LuluPetDataPaths.GetDefaultClipboardHistoryPath());
+        _clipboardHistory.ReplaceWith(_clipboardHistoryStore.Load());
         _fileTransitService = new FileTransitService(_settings.ToolPanels.FileTransitFolderPath);
         _reminderScheduler = new ReminderScheduler(_settings.Reminders);
 
@@ -313,6 +317,7 @@ public partial class MainWindow : System.Windows.Window
         _companionTimer.Stop();
         _clipboardMonitor?.Dispose();
         SaveCompanionElapsed();
+        SaveClipboardHistory();
         SaveWindowPosition();
         DisposeTrayIcon();
         base.OnClosing(e);
@@ -692,6 +697,7 @@ public partial class MainWindow : System.Windows.Window
         {
             ClampWindowToWorkArea();
             ApplyAutoStartSetting();
+            UpdateTrayMenuState();
         };
     }
 
@@ -1609,10 +1615,10 @@ public partial class MainWindow : System.Windows.Window
                 return;
             }
 
-            var image = GetClipboardImage();
-            if (image is not null)
+            var imageBytes = GetClipboardImagePngBytes();
+            if (imageBytes is not null)
             {
-                AddClipboardImageToTransit(image);
+                AddClipboardImageToTransit(imageBytes);
                 UpdateFileTransitPanelState();
                 FileTransitPanel.SetStatus("已粘贴剪切板图片");
                 return;
@@ -1633,16 +1639,10 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    private void AddClipboardImageToTransit(BitmapSource image)
+    private void AddClipboardImageToTransit(byte[] imageBytes)
     {
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(image));
-
-        using var stream = new MemoryStream();
-        encoder.Save(stream);
-
         var fileName = $"clipboard-image-{DateTime.Now:yyyyMMdd-HHmmss}.png";
-        _fileTransitService.AddFileBytes(fileName, stream.ToArray());
+        _fileTransitService.AddFileBytes(fileName, imageBytes);
     }
 
     private static IReadOnlyList<string> GetClipboardFileDropList()
@@ -1680,10 +1680,70 @@ public partial class MainWindow : System.Windows.Window
             .ToArray();
     }
 
-    private static BitmapSource? GetClipboardImage()
+    private static byte[]? GetClipboardImagePngBytes()
     {
-        return ReadClipboardWithRetry(() =>
-            WpfClipboard.ContainsImage() ? WpfClipboard.GetImage() : null);
+        try
+        {
+            var imageBytes = ReadClipboardWithRetry(ReadFormsClipboardImagePngBytes);
+            if (imageBytes is not null)
+            {
+                return imageBytes;
+            }
+        }
+        catch (Exception exception) when (exception is ExternalException
+            or InvalidOperationException
+            or ArgumentException)
+        {
+            Debug.WriteLine($"Failed to read clipboard image through Windows Forms: {exception.Message}");
+        }
+
+        return ReadClipboardWithRetry(ReadWpfClipboardImagePngBytes);
+    }
+
+    private static byte[]? ReadFormsClipboardImagePngBytes()
+    {
+        if (!Forms.Clipboard.ContainsImage())
+        {
+            return null;
+        }
+
+        using var image = Forms.Clipboard.GetImage();
+        if (image is null)
+        {
+            return null;
+        }
+
+        using var bitmap = new Bitmap(image.Width, image.Height, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.Clear(System.Drawing.Color.Transparent);
+            graphics.DrawImage(image, 0, 0, image.Width, image.Height);
+        }
+
+        using var stream = new MemoryStream();
+        bitmap.Save(stream, ImageFormat.Png);
+        return stream.ToArray();
+    }
+
+    private static byte[]? ReadWpfClipboardImagePngBytes()
+    {
+        if (!WpfClipboard.ContainsImage())
+        {
+            return null;
+        }
+
+        var image = WpfClipboard.GetImage();
+        if (image is null)
+        {
+            return null;
+        }
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(image));
+
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return stream.ToArray();
     }
 
     private void CopyClipboardHistoryText(string text)
@@ -1791,6 +1851,23 @@ public partial class MainWindow : System.Windows.Window
         if (_activeToolPanel == ToolPanelKind.Clipboard)
         {
             UpdateClipboardPanelState();
+        }
+
+        SaveClipboardHistory();
+    }
+
+    private void SaveClipboardHistory()
+    {
+        try
+        {
+            _clipboardHistoryStore.Save(_clipboardHistory.Snapshot());
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or System.Security.SecurityException)
+        {
+            Debug.WriteLine($"Failed to save clipboard history: {exception.Message}");
         }
     }
 

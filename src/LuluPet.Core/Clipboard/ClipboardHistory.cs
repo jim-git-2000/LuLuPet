@@ -42,6 +42,32 @@ public sealed class ClipboardHistory
         return _items.ToArray();
     }
 
+    public void ReplaceWith(IEnumerable<ClipboardHistoryItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        _items.Clear();
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.Text))
+            {
+                continue;
+            }
+
+            var normalizedText = item.Text.Trim();
+            if (_items.Any(existing => existing.Text == normalizedText))
+            {
+                continue;
+            }
+
+            _items.Add(new ClipboardHistoryItem(normalizedText, item.CapturedAt));
+            if (_items.Count >= Capacity)
+            {
+                break;
+            }
+        }
+    }
+
     public void Clear()
     {
         _items.Clear();

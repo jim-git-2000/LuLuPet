@@ -23,4 +23,9 @@ public static class LuluPetDataPaths
     {
         return Path.Combine(GetDefaultDataDirectory(), "Transit");
     }
+
+    public static string GetDefaultClipboardHistoryPath()
+    {
+        return Path.Combine(GetDefaultDataDirectory(), "clipboard-history.json");
+    }
 }

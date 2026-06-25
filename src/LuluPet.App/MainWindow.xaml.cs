@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -22,9 +24,6 @@ using LuluPet.App.Services;
 using LuluPet.Win32;
 using Forms = System.Windows.Forms;
 using WpfClipboard = System.Windows.Clipboard;
-using WpfDataFormats = System.Windows.DataFormats;
-using WpfDataObject = System.Windows.DataObject;
-using WpfDragDropEffects = System.Windows.DragDropEffects;
 using WpfTextDataFormat = System.Windows.TextDataFormat;
 
 namespace LuluPet.App;
@@ -94,6 +93,8 @@ public partial class MainWindow : System.Windows.Window
     private const double BaseSpeechBubbleHeight = 96;
     private const double ToolPanelColumnWidth = 324;
     private const double DragThreshold = 4;
+    private const int ClipboardWriteMaxAttempts = 6;
+    private const int ClipboardWriteRetryDelayMilliseconds = 25;
     private static readonly TimeSpan InteractionAnimationDuration = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan BubbleVisibleDuration = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan PeriodicSpeechInterval = TimeSpan.FromSeconds(30);
@@ -1502,12 +1503,7 @@ public partial class MainWindow : System.Windows.Window
                 return;
             }
 
-            var dataObject = new WpfDataObject();
-            dataObject.SetData(WpfDataFormats.FileDrop, new[] { path });
-            dataObject.SetData(
-                "Preferred DropEffect",
-                new MemoryStream(BitConverter.GetBytes((int)WpfDragDropEffects.Copy)));
-            WpfClipboard.SetDataObject(dataObject, true);
+            SetClipboardFileCopy(path);
             FileTransitPanel.SetStatus("已复制文件");
         }
         catch (Exception exception) when (exception is IOException
@@ -1515,7 +1511,7 @@ public partial class MainWindow : System.Windows.Window
             or UnauthorizedAccessException
             or NotSupportedException
             or InvalidOperationException
-            or System.Runtime.InteropServices.ExternalException
+            or ExternalException
             or System.Security.SecurityException)
         {
             Debug.WriteLine($"Failed to copy file transit file: {exception.Message}");
@@ -1549,15 +1545,61 @@ public partial class MainWindow : System.Windows.Window
     {
         try
         {
-            WpfClipboard.SetText(text, WpfTextDataFormat.UnicodeText);
+            WriteClipboardWithRetry(() => WpfClipboard.SetText(text, WpfTextDataFormat.UnicodeText));
             ClipboardPanel.SetStatus("已复制到剪切板");
         }
         catch (Exception exception) when (exception is ArgumentException
             or InvalidOperationException
-            or System.Runtime.InteropServices.ExternalException)
+            or ExternalException)
         {
             Debug.WriteLine($"Failed to copy clipboard history text: {exception.Message}");
             ClipboardPanel.SetStatus("复制失败");
+        }
+    }
+
+    private static void SetClipboardFileCopy(string path)
+    {
+        var fileDropList = new StringCollection
+        {
+            path
+        };
+
+        try
+        {
+            var dataObject = new Forms.DataObject();
+            dataObject.SetFileDropList(fileDropList);
+            dataObject.SetData(
+                "Preferred DropEffect",
+                new MemoryStream(BitConverter.GetBytes((int)Forms.DragDropEffects.Copy)));
+
+            WriteClipboardWithRetry(() => Forms.Clipboard.SetDataObject(dataObject, true));
+        }
+        catch (Exception exception) when (exception is ExternalException
+            or InvalidOperationException
+            or ArgumentException
+            or NotSupportedException)
+        {
+            WriteClipboardWithRetry(() => Forms.Clipboard.SetFileDropList(fileDropList));
+        }
+    }
+
+    private static void WriteClipboardWithRetry(Action writeClipboard)
+    {
+        for (var attempt = 1; attempt <= ClipboardWriteMaxAttempts; attempt++)
+        {
+            try
+            {
+                writeClipboard();
+                return;
+            }
+            catch (ExternalException) when (attempt < ClipboardWriteMaxAttempts)
+            {
+                System.Threading.Thread.Sleep(ClipboardWriteRetryDelayMilliseconds);
+            }
+            catch (InvalidOperationException) when (attempt < ClipboardWriteMaxAttempts)
+            {
+                System.Threading.Thread.Sleep(ClipboardWriteRetryDelayMilliseconds);
+            }
         }
     }
 

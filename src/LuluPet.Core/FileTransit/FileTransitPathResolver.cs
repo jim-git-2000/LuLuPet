@@ -20,6 +20,11 @@ public static class FileTransitPathResolver
         ArgumentNullException.ThrowIfNull(exists);
 
         var fileName = Path.GetFileName(sourceFileName);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            throw new ArgumentException("Source file name must include a file name.", nameof(sourceFileName));
+        }
+
         var candidate = Path.Combine(folderPath, fileName);
         if (!exists(candidate))
         {

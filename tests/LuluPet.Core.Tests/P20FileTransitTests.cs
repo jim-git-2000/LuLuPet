@@ -60,4 +60,14 @@ public sealed class P20FileTransitTests
 
         Assert.Equal(Path.Combine("/transit", "notes (1)"), destinationPath);
     }
+
+    [Fact]
+    public void FileTransitPathResolver_RejectsSourceNameWithoutFileName()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            FileTransitPathResolver.GetAvailableDestinationPath(
+                "/transit",
+                Path.DirectorySeparatorChar.ToString(),
+                _ => false));
+    }
 }

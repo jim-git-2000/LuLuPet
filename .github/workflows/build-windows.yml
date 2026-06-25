@@ -176,17 +176,22 @@ jobs:
             $packageZip,
             "$packageZip.sha256.txt"
           )
-          $notes = @(
-            "LuluPet $env:RELEASE_TAG",
-            "",
-            "Assets:",
-            "- $env:PACKAGE_NAME.zip: Windows x64 package including LuluPet.exe, Assets, and settings.json",
-            "- $env:PACKAGE_NAME.zip.sha256.txt: SHA256 checksum",
-            "",
-            "GitHub also provides Source code zip/tar.gz automatically for this tag.",
-            "",
-            "Download the zip, extract it, then run LuluPet.exe from the extracted folder."
-          ) -join [Environment]::NewLine
+          $releaseNotesPath = "docs/releases/$env:RELEASE_TAG.md"
+          if (Test-Path $releaseNotesPath) {
+            $notes = Get-Content $releaseNotesPath -Raw
+          } else {
+            $notes = @(
+              "LuluPet $env:RELEASE_TAG",
+              "",
+              "Assets:",
+              "- $env:PACKAGE_NAME.zip: Windows x64 package including LuluPet.exe, Assets, and settings.json",
+              "- $env:PACKAGE_NAME.zip.sha256.txt: SHA256 checksum",
+              "",
+              "GitHub also provides Source code zip/tar.gz automatically for this tag.",
+              "",
+              "Download the zip, extract it, then run LuluPet.exe from the extracted folder."
+            ) -join [Environment]::NewLine
+          }
 
           if (gh release view $env:RELEASE_TAG 2>$null) {
             gh release upload $env:RELEASE_TAG @assets --clobber

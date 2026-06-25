@@ -1713,7 +1713,10 @@ public partial class MainWindow : System.Windows.Window
             return null;
         }
 
-        using var bitmap = new Bitmap(image.Width, image.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using var bitmap = new Bitmap(
+            image.Width,
+            image.Height,
+            global::System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         using (var graphics = Graphics.FromImage(bitmap))
         {
             graphics.Clear(System.Drawing.Color.Transparent);
@@ -1891,7 +1894,7 @@ public partial class MainWindow : System.Windows.Window
             return false;
         }
 
-        if (_frameCache.TryGetValue(framePath, out var cachedImage))
+        if (_frameCache.TryGetValue(framePath, out var cachedImage) && cachedImage is not null)
         {
             image = cachedImage;
             return true;

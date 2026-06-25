@@ -195,7 +195,7 @@ PetStateMachine
 推荐从 GitHub Actions 或 Release 下载 Windows x64 构建：
 
 - Actions artifact：`LuluPet-win-x64-ci-<run-number>`
-- Release asset：`LuluPet-win-x64-v版本号.zip`，例如 `LuluPet-win-x64-v1.1.0.zip`
+- Release asset：`LuluPet-win-x64-v版本号.zip`，例如 `LuluPet-win-x64-v1.1.1.zip`
 
 下载 zip 后先解压，再双击解压目录里的 `LuluPet.exe` 运行。不要只单独复制 exe；运行目录需要同时保留 `Assets/`、`settings.json` 等资源文件。首次启动后会显示透明桌面宠物，同时右下角托盘区域会出现 LuluPet 图标。
 
@@ -222,11 +222,11 @@ Ubuntu 本机如果缺少 `Microsoft.NET.Sdk.WindowsDesktop`，完整 WPF 构建
 
 GitHub Release 页面还会自动提供该 tag 对应的 Source code zip/tar.gz。
 
-发布 `v1.1.0`：
+发布 `v1.1.1`：
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.1.1
+git push origin v1.1.1
 ```
 
 回滚策略：

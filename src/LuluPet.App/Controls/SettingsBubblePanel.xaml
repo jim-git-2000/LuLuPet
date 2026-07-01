@@ -124,6 +124,12 @@
                               Foreground="#FF5A3A18"
                               Checked="ClickThroughCheckBox_Changed"
                               Unchecked="ClickThroughCheckBox_Changed" />
+                    <CheckBox x:Name="WalkModeCheckBox"
+                              Content="散步模式"
+                              Margin="0,0,0,10"
+                              Foreground="#FF5A3A18"
+                              Checked="WalkModeCheckBox_Changed"
+                              Unchecked="WalkModeCheckBox_Changed" />
                     <CheckBox x:Name="AutoStartCheckBox"
                               Content="开机启动"
                               Margin="0,0,0,14"

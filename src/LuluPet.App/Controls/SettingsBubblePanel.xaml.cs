@@ -25,6 +25,8 @@ public partial class SettingsBubblePanel : System.Windows.Controls.UserControl
 
     public event Action<bool>? ClickThroughChanged;
 
+    public event Action<bool>? WalkModeChanged;
+
     public event Action<bool>? AutoStartChanged;
 
     public event Action<string>? FileTransitFolderChanged;
@@ -38,6 +40,7 @@ public partial class SettingsBubblePanel : System.Windows.Controls.UserControl
             OpacitySlider.Value = settings.Appearance.Opacity;
             VolumeSlider.Value = settings.Audio.Volume;
             ClickThroughCheckBox.IsChecked = settings.Interaction.ClickThrough;
+            WalkModeCheckBox.IsChecked = settings.Interaction.WalkMode;
             AutoStartCheckBox.IsChecked = settings.Startup.AutoStart;
             UpdateFileTransitFolderText(settings.ToolPanels.FileTransitFolderPath);
             UpdateValueText();
@@ -94,6 +97,14 @@ public partial class SettingsBubblePanel : System.Windows.Controls.UserControl
         if (!_isInitializing)
         {
             ClickThroughChanged?.Invoke(ClickThroughCheckBox.IsChecked == true);
+        }
+    }
+
+    private void WalkModeCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_isInitializing)
+        {
+            WalkModeChanged?.Invoke(WalkModeCheckBox.IsChecked == true);
         }
     }
 

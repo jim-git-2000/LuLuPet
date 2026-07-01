@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using LuluPet.Win32;
 using WpfTextDataFormat = System.Windows.TextDataFormat;
 
@@ -9,8 +10,12 @@ namespace LuluPet.App.Services;
 
 public sealed class ClipboardMonitor : IDisposable
 {
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+
     private HwndSource? _source;
+    private DispatcherTimer? _pollTimer;
     private nint _windowHandle;
+    private bool _isRegisteredFormatListener;
     private bool _isListening;
 
     public event EventHandler<string>? TextChanged;
@@ -28,15 +33,24 @@ public sealed class ClipboardMonitor : IDisposable
             return;
         }
 
-        if (!NativeMethods.AddClipboardFormatListener(windowHandle))
+        if (NativeMethods.AddClipboardFormatListener(windowHandle))
+        {
+            _windowHandle = windowHandle;
+            _source.AddHook(WndProc);
+            _isRegisteredFormatListener = true;
+        }
+        else
         {
             Debug.WriteLine("Failed to register clipboard format listener.");
-            _source = null;
-            return;
         }
 
-        _windowHandle = windowHandle;
-        _source.AddHook(WndProc);
+        _pollTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = PollInterval
+        };
+        _pollTimer.Tick += (_, _) => CaptureCurrentText();
+        _pollTimer.Start();
+
         _isListening = true;
         CaptureCurrentText();
     }
@@ -53,14 +67,22 @@ public sealed class ClipboardMonitor : IDisposable
             return;
         }
 
-        _source?.RemoveHook(WndProc);
-        if (_windowHandle != nint.Zero)
+        _pollTimer?.Stop();
+        _pollTimer = null;
+
+        if (_isRegisteredFormatListener)
+        {
+            _source?.RemoveHook(WndProc);
+        }
+
+        if (_isRegisteredFormatListener && _windowHandle != nint.Zero)
         {
             NativeMethods.RemoveClipboardFormatListener(_windowHandle);
         }
 
         _source = null;
         _windowHandle = nint.Zero;
+        _isRegisteredFormatListener = false;
         _isListening = false;
     }
 

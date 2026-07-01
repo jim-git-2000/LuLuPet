@@ -46,6 +46,8 @@ public sealed class AudioSettings
 public sealed class InteractionSettings
 {
     public bool ClickThrough { get; set; }
+
+    public bool WalkMode { get; set; }
 }
 
 public sealed class StartupSettings

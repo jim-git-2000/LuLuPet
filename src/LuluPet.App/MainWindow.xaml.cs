@@ -54,6 +54,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly Forms.ToolStripMenuItem _settingsMenuItem;
     private readonly Forms.ToolStripMenuItem _tutorialMenuItem;
     private readonly Forms.ToolStripMenuItem _clickThroughMenuItem;
+    private readonly Forms.ToolStripMenuItem _walkModeMenuItem;
     private readonly Forms.ToolStripMenuItem _autoStartMenuItem;
     private DateTimeOffset _lastAnimationTick;
     private DateTimeOffset _lastStateTick;
@@ -134,6 +135,10 @@ public partial class MainWindow : System.Windows.Window
         {
             CheckOnClick = false
         };
+        _walkModeMenuItem = new Forms.ToolStripMenuItem("散步模式", null, (_, _) => ToggleWalkMode())
+        {
+            CheckOnClick = false
+        };
         _autoStartMenuItem = new Forms.ToolStripMenuItem("开机启动", null, (_, _) => ToggleAutoStart())
         {
             CheckOnClick = false
@@ -175,6 +180,8 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
+        StopScreenLapAndReturnIdle();
+
         if (e.ClickCount >= 2 && IsFromPetImage(e.OriginalSource))
         {
             HandlePetDoubleClick();
@@ -195,6 +202,7 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
+        StopScreenLapAndReturnIdle();
         TriggerEat();
         e.Handled = true;
     }
@@ -341,6 +349,7 @@ public partial class MainWindow : System.Windows.Window
         contextMenu.Items.Add(_tutorialMenuItem);
         contextMenu.Items.Add(new Forms.ToolStripSeparator());
         contextMenu.Items.Add(_clickThroughMenuItem);
+        contextMenu.Items.Add(_walkModeMenuItem);
         contextMenu.Items.Add(_autoStartMenuItem);
         contextMenu.Items.Add(new Forms.ToolStripSeparator());
         contextMenu.Items.Add(exitMenuItem);
@@ -498,6 +507,7 @@ public partial class MainWindow : System.Windows.Window
         _showMenuItem.Enabled = !IsVisible;
         _hideMenuItem.Enabled = IsVisible;
         _clickThroughMenuItem.Checked = _settings.Interaction.ClickThrough;
+        _walkModeMenuItem.Checked = _settings.Interaction.WalkMode;
         _autoStartMenuItem.Checked = _settings.Startup.AutoStart;
         SettingsPanel.ApplySettings(_settings);
         UpdateCompanionTrayText();
@@ -656,6 +666,7 @@ public partial class MainWindow : System.Windows.Window
             SaveSettings();
         };
         SettingsPanel.ClickThroughChanged += SetClickThrough;
+        SettingsPanel.WalkModeChanged += SetWalkMode;
         SettingsPanel.AutoStartChanged += SetAutoStart;
         SettingsPanel.FileTransitFolderChanged += SetFileTransitFolder;
         SettingsPanel.ApplySettings(_settings);
@@ -816,6 +827,11 @@ public partial class MainWindow : System.Windows.Window
 
         _stateMachine.Tick(elapsed);
 
+        if (!_settings.Interaction.WalkMode && _stateMachine.CurrentState == PetState.Walk)
+        {
+            _stateMachine.ForceState(PetState.Idle);
+        }
+
         if (_isScreenLapActive)
         {
             MoveAlongScreenLap(elapsed);
@@ -936,6 +952,12 @@ public partial class MainWindow : System.Windows.Window
 
         if (args.CurrentState == PetState.Walk)
         {
+            if (!_settings.Interaction.WalkMode)
+            {
+                _stateMachine.ForceState(PetState.Idle);
+                return;
+            }
+
             BeginWalkMotion();
             ShowSpeech(WalkSpeechText, autoHide: false);
             _isWalkSpeechVisible = true;
@@ -1090,10 +1112,7 @@ public partial class MainWindow : System.Windows.Window
     private void EndScreenLap()
     {
         var speechText = _screenLapSpeechText;
-        _screenLapTargets.Clear();
-        _screenLapTargetIndex = 0;
-        _screenLapSpeechText = null;
-        _isScreenLapActive = false;
+        ClearScreenLapState();
         _stateMachine.ForceState(PetState.Idle);
         PlayStateAnimation(_stateMachine.CurrentState);
 
@@ -1101,6 +1120,27 @@ public partial class MainWindow : System.Windows.Window
         {
             ShowSpeech(speechText);
         }
+    }
+
+    private void StopScreenLapAndReturnIdle()
+    {
+        if (!_isScreenLapActive)
+        {
+            return;
+        }
+
+        ClearScreenLapState();
+        HideSpeechBubble();
+        _stateMachine.ForceState(PetState.Idle);
+        PlayStateAnimation(PetState.Idle);
+    }
+
+    private void ClearScreenLapState()
+    {
+        _screenLapTargets.Clear();
+        _screenLapTargetIndex = 0;
+        _screenLapSpeechText = null;
+        _isScreenLapActive = false;
     }
 
     private bool TryBuildScreenLapTargets(out IReadOnlyList<System.Windows.Point> targets)
@@ -2062,6 +2102,11 @@ public partial class MainWindow : System.Windows.Window
         SetAutoStart(!_settings.Startup.AutoStart);
     }
 
+    private void ToggleWalkMode()
+    {
+        SetWalkMode(!_settings.Interaction.WalkMode);
+    }
+
     private void ShowTrayToolPanel(ToolPanelKind panel)
     {
         if (_settings.Interaction.ClickThrough)
@@ -2082,6 +2127,19 @@ public partial class MainWindow : System.Windows.Window
 
         _settings.Interaction.ClickThrough = enabled;
         ApplyWindowStyles();
+        SaveSettings();
+        UpdateTrayMenuState();
+    }
+
+    private void SetWalkMode(bool enabled)
+    {
+        _settings.Interaction.WalkMode = enabled;
+        if (!enabled && _stateMachine.CurrentState == PetState.Walk && !_isScreenLapActive)
+        {
+            _stateMachine.ForceState(PetState.Idle);
+            HideSpeechBubble();
+        }
+
         SaveSettings();
         UpdateTrayMenuState();
     }
